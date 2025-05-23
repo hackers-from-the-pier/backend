@@ -1,0 +1,14 @@
+cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+fastapi
+fastapi-jwt
+sqlalchemy
+alembic
+dotenv
+psycopg2-binary
+uvicorn
+asyncpg
+pydantic-extra-types
+phonenumbers
+python-multipart
