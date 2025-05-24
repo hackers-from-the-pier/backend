@@ -142,23 +142,24 @@ async def upload_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке файла: {str(e)}")
 
-async def update_or_create_client(client_data: dict, db: AsyncSession) -> Client:
+async def update_or_create_client(client: Client, db: AsyncSession) -> Client:
     """
     Обновляет существующего клиента или создает нового
     """
     # Проверяем существование клиента
-    query = select(Client).where(Client.id == client_data['id'])
+    query = select(Client).where(Client.id == client.id)
     result = await db.execute(query)
     existing_client = result.scalar_one_or_none()
     
     if existing_client:
         # Обновляем существующего клиента
-        for key, value in client_data.items():
-            setattr(existing_client, key, value)
+        for key, value in client.__dict__.items():
+            if not key.startswith('_'):
+                setattr(existing_client, key, value)
         return existing_client
     else:
         # Создаем нового клиента
-        return Client(**client_data)
+        return client
 
 @router.post("/{report_id}/check")
 async def start_check(
@@ -184,6 +185,7 @@ async def start_check(
         raise HTTPException(status_code=404, detail="Файлы отчета не найдены")
     
     try:
+        total_clients = 0
         # Обрабатываем каждый файл
         for file in files:
             if not file.is_parsed:
@@ -196,19 +198,20 @@ async def start_check(
                     continue
                 
                 # Обрабатываем файл
-                clients_data = process_report(file_path, report_id)
+                clients = process_report(file_path, report_id)
+                total_clients += len(clients)
                 
                 # Сохраняем клиентов в базу данных
-                for client_data in clients_data:
-                    client = await update_or_create_client(client_data, db)
-                    db.add(client)
+                for client in clients:
+                    updated_client = await update_or_create_client(client, db)
+                    db.add(updated_client)
                 
                 # Отмечаем файл как обработанный
                 file.is_parsed = True
         
         # Обновляем статус отчета
         report.is_ready = True
-        report.all_count = len(clients_data) if 'clients_data' in locals() else 0
+        report.all_count = total_clients
         
         await db.commit()
         
@@ -219,7 +222,7 @@ async def start_check(
         return {
             "message": "Проверка завершена, парсер Авито запущен в отдельном процессе",
             "processed_files": len(files),
-            "clients_count": report.all_count,
+            "clients_count": total_clients,
             "parser_process_id": process.pid
         }
         
