@@ -4,25 +4,46 @@ import threading
 import time
 import re
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+import asyncio
+from typing import List, Optional
 
 import requests
 from notifiers.logging import NotificationHandler
 from selenium.webdriver.common.by import By
 from seleniumbase import SB
 from loguru import logger
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from custom_exception import StopEventException
 from db_service import SQLiteDBHandler
 from locator import LocatorAvito
 from xlsx_service import XLSXHandler
 from dotenv import load_dotenv
+from utils.database import get_async_session
+from utils.models import Client
 
 load_dotenv()
 
+async def get_commercial_addresses(report_id: int, session: AsyncSession) -> List[dict]:
+    """Получение адресов коммерческих клиентов из базы данных"""
+    query = select(Client.id, Client.address).where(
+        Client.report_id == report_id,
+        Client.is_commercial == True,
+        Client.address.isnot(None)
+    )
+    result = await session.execute(query)
+    return [{"id": row[0], "address": row[1]} for row in result if row[1]]
+
+async def update_client_avito_link(client_id: int, avito_link: str, session: AsyncSession):
+    """Обновление ссылки на Авито для клиента"""
+    query = update(Client).where(Client.id == client_id).values(frod_avito=avito_link)
+    await session.execute(query)
+    await session.commit()
 
 class AvitoParse:
     """
-    Парсинг  товаров на avito.ru
+    Парсинг товаров на avito.ru
     """
     def __init__(self,
                  url: list,
@@ -36,11 +57,11 @@ class AvitoParse:
                  debug_mode: int = 0,
                  need_more_info: int = 1,
                  proxy: str = None,
-                 proxy_change_url: str = None,
+                 proxy_change_url: str = "https://changeip.mobileproxy.space/?proxy_key=0a74edb01bb5fb1dd3b845dad96f26d5",
                  stop_event=None,
                  max_views: int = None,
                  fast_speed: int = 0,
-                 exact_address: str = None
+                 report_id: Optional[int] = None  # ID отчета
                  ):
         self.url_list = url
         self.url = None
@@ -62,29 +83,48 @@ class AvitoParse:
         self.db_handler = SQLiteDBHandler()
         self.xlsx_handler = XLSXHandler(self.title_file)
         self.fast_speed = fast_speed
-        self.exact_address = exact_address
+        self.report_id = report_id
+        self.addresses = []
+        self.current_address_index = 0
+        self.current_client_id = None
+        self.last_ip_change = 0  # Время последней смены IP
+        self.ip_change_interval = 300  # Интервал смены IP в секундах (5 минут)
+
+    async def load_addresses_from_db(self):
+        """Загрузка адресов из базы данных"""
+        if not self.report_id:
+            return
+
+        async for session in get_async_session():
+            try:
+                self.addresses = await get_commercial_addresses(self.report_id, session)
+                logger.info(f"Загружено {len(self.addresses)} адресов из базы данных")
+            except Exception as e:
+                logger.error(f"Ошибка при загрузке адресов из БД: {e}")
+            break
 
     @property
     def use_proxy(self) -> bool:
         return all([self.proxy, self.proxy_change_url])
 
     def ip_block(self) -> None:
+        """Обработка блокировки IP"""
         if self.use_proxy:
-            logger.info("Блок IP")
+            logger.info("Обнаружена блокировка IP")
             self.change_ip()
         else:
             logger.info("Блок IP. Прокси нет, поэтому делаю паузу")
             time.sleep(random.randint(300, 350))
 
     def __get_url(self):
-        """Модифицированный метод для работы с точным адресом"""
-        if self.exact_address:
+        """Модифицированный метод для работы с текущим адресом"""
+        if hasattr(self, 'current_address'):
             # Добавляем параметры адреса к URL
             parsed_url = urlparse(self.url)
             query_params = parse_qs(parsed_url.query)
             
             # Добавляем параметры адреса
-            query_params['address'] = [self.exact_address]
+            query_params['address'] = [self.current_address]
             query_params['radius'] = ['0']  # Точное совпадение
             
             # Формируем новый URL
@@ -186,7 +226,7 @@ class AvitoParse:
                 description = ''
 
             url = title.find_element(*LocatorAvito.URL).get_attribute("href")
-            price = title.find_element(*LocatorAvito.PRICE).get_attribute("content")
+            price = title.find_attribute("content")
             ads_id = title.get_attribute("data-item-id")
 
             if url and not ads_id:
@@ -274,17 +314,16 @@ class AvitoParse:
             self.__pretty_log(data=data)
 
     def __parse_full_page(self, data: dict) -> dict:
-        """Парсит для доп. информации открытое объявление"""
+        """Модифицированный метод для проверки точного адреса и сохранения ссылки"""
         self.driver.get(data.get("url"))
         if "Доступ ограничен" in self.driver.get_title():
             logger.info("Доступ ограничен: проблема с IP")
             self.ip_block()
             return self.__parse_full_page(data=data)
-        """Если не дождались загрузки"""
+
         try:
             self.driver.wait_for_element(LocatorAvito.TOTAL_VIEWS[1], by="css selector", timeout=10)
         except Exception:
-            """Проверка на бан по ip"""
             if "Доступ ограничен" in self.driver.get_title():
                 logger.info("Доступ ограничен: проблема с IP")
                 self.ip_block()
@@ -293,13 +332,15 @@ class AvitoParse:
             return data
 
         # Проверяем точный адрес
-        if self.exact_address and self.driver.find_elements(LocatorAvito.GEO[1], by="css selector"):
+        if self.addresses and self.driver.find_elements(LocatorAvito.GEO[1], by="css selector"):
             geo = self.driver.find_element(LocatorAvito.GEO[1], by="css selector").text
             data["geo"] = geo.lower()
             
-            # Если адрес не совпадает точно, пропускаем объявление
-            if self.exact_address.lower() not in geo.lower():
-                return None
+            # Если адрес совпадает, сохраняем ссылку в БД
+            if self.current_address.lower() in geo.lower():
+                asyncio.run(self.save_avito_link(data.get("url")))
+                return data
+            return None
 
         # Остальной код метода остается без изменений
         if self.driver.find_elements(LocatorAvito.TOTAL_VIEWS[1], by="css selector"):
@@ -330,27 +371,79 @@ class AvitoParse:
         self.db_handler.add_record(record_id=int(data.get("id")), price=int(data.get("price")))
 
     def __get_file_title(self) -> str:
-        """Определяет название файла"""
-        if self.keys_word not in ['', None]:
+        """Определяет название файла с учетом текущего адреса"""
+        if self.addresses:
+            current_address = self.addresses[self.current_address_index]["address"]
+            # Создаем безопасное имя файла из адреса
+            safe_address = re.sub(r'[^\w\s-]', '', current_address)
+            safe_address = re.sub(r'[-\s]+', '_', safe_address).strip('-_')
+            return f"result/report_{self.report_id}_address_{safe_address}.xlsx"
+        elif self.keys_word not in ['', None]:
             title_file = "-".join(list(map(str.lower, self.keys_word)))
         else:
             title_file = 'all'
         return f"result/{title_file}.xlsx"
 
     def parse(self):
-        """Метод для вызова"""
+        """Модифицированный метод для обработки массива адресов"""
+        if not self.addresses:
+            # Стандартный режим работы без адресов
+            self._parse_single_url()
+            return
+
+        # Режим работы с массивом адресов
+        for address_data in self.addresses:
+            if self.stop_event and self.stop_event.is_set():
+                logger.info("Процесс будет остановлен")
+                return
+
+            self.current_client_id = address_data["id"]
+            current_address = address_data["address"]
+            logger.info(f"Обработка адреса: {current_address} (ID клиента: {self.current_client_id})")
+            self.current_address = current_address
+            self.xlsx_handler = XLSXHandler(self.__get_file_title())
+            
+            try:
+                self._parse_single_url()
+            except Exception as err:
+                logger.error(f"Ошибка при обработке адреса {current_address}: {err}")
+                continue
+
+            # Пауза между адресами
+            time.sleep(random.randint(5, 10))
+
+    def _parse_single_url(self):
+        """Вспомогательный метод для парсинга одного URL"""
         for _url in self.url_list:
             self.url = _url
             if self.stop_event and self.stop_event.is_set():
                 logger.info("Процесс будет остановлен")
                 return
+
+            # Настройка SOCKS5 прокси
+            proxy_settings = {}
+            if self.proxy:
+                proxy_parts = self.proxy.split('@')
+                if len(proxy_parts) == 2:
+                    auth, host_port = proxy_parts
+                    username, password = auth.split(':')
+                    host, port = host_port.split(':')
+                    
+                    proxy_settings = {
+                        'proxyType': 'MANUAL',
+                        'socksProxy': f'{host}:{port}',
+                        'socksVersion': 5,
+                        'socksUsername': username,
+                        'socksPassword': password
+                    }
+
             with SB(uc=True,
                     headed=True if self.debug_mode else False,
                     headless2=True if not self.debug_mode else False,
                     page_load_strategy="eager",
                     block_images=True,
                     agent=random.choice(open("user_agent_pc.txt").readlines()),
-                    proxy=self.proxy,
+                    proxy_settings=proxy_settings,  # Используем настройки SOCKS5
                     sjw=True if self.fast_speed else False,
                     ) as self.driver:
                 try:
@@ -361,8 +454,6 @@ class AvitoParse:
                     return
                 except Exception as err:
                     logger.debug(f"Ошибка: {err}")
-        self.stop_event.clear()
-        logger.info("Парсинг завершен")
 
     def check_stop_event(self):
         if self.stop_event.is_set():
@@ -370,24 +461,69 @@ class AvitoParse:
             raise StopEventException()
 
     def change_ip(self) -> bool:
+        """Смена IP через mobileproxy.space"""
+        current_time = time.time()
+        
+        # Проверяем, прошло ли достаточно времени с последней смены IP
+        if current_time - self.last_ip_change < self.ip_change_interval:
+            logger.info(f"Ждем {self.ip_change_interval - (current_time - self.last_ip_change):.0f} секунд перед следующей сменой IP")
+            time.sleep(self.ip_change_interval - (current_time - self.last_ip_change))
+        
         logger.info("Меняю IP")
-        res = requests.get(url=self.proxy_change_url)
-        if res.status_code == 200:
-            logger.info("IP изменен")
-            return True
-        logger.info("Не удалось изменить IP, пробую еще раз")
+        try:
+            response = requests.get(
+                self.proxy_change_url,
+                timeout=30,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            )
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if data.get('status') == 'success':
+                        self.last_ip_change = time.time()
+                        logger.info(f"IP успешно изменен. Новый IP: {data.get('ip', 'неизвестен')}")
+                        return True
+                    else:
+                        logger.error(f"Ошибка при смене IP: {data.get('message', 'неизвестная ошибка')}")
+                except ValueError:
+                    logger.error("Не удалось разобрать ответ сервера")
+            else:
+                logger.error(f"Ошибка при смене IP. Код ответа: {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при смене IP: {str(e)}")
+        
+        # Если не удалось сменить IP, ждем и пробуем снова
+        logger.info("Повторная попытка смены IP через 10 секунд")
         time.sleep(10)
         return self.change_ip()
+
+    async def save_avito_link(self, avito_link: str):
+        """Сохранение ссылки на Авито в базу данных"""
+        if not self.current_client_id:
+            return
+
+        async for session in get_async_session():
+            try:
+                await update_client_avito_link(self.current_client_id, avito_link, session)
+                logger.info(f"Ссылка на Авито сохранена для клиента {self.current_client_id}")
+            except Exception as e:
+                logger.error(f"Ошибка при сохранении ссылки на Авито: {e}")
+            break
 
 
 if __name__ == '__main__':
     import configparser
+    import json
+    import sys
 
     config = configparser.ConfigParser()
     config.read("settings.ini", encoding="utf-8")
 
     try:
-        """Багфикс проблем с экранированием"""
         url = config["Avito"]["URL"].split(",")
     except Exception:
         with open('settings.ini', encoding="utf-8") as file:
@@ -395,9 +531,14 @@ if __name__ == '__main__':
             regex = r"http.+"
             url = re.findall(regex, line_url)
 
-    # Если запуск через докер
-    if env_urls := os.getenv("URL_AVITO"):
-        url = env_urls.split(" ")
+    # Получаем ID отчета из аргументов командной строки
+    report_id = None
+    if len(sys.argv) > 1:
+        try:
+            report_id = int(sys.argv[1])
+        except ValueError:
+            logger.error("ID отчета должен быть числом")
+            sys.exit(1)
 
     chat_ids = config["Avito"]["CHAT_ID"].split(",")
     token = config["Avito"]["TG_TOKEN"]
@@ -409,15 +550,16 @@ if __name__ == '__main__':
     max_price = config["Avito"].get("MAX_PRICE", "9999999999") or "9999999999"
     min_price = config["Avito"].get("MIN_PRICE", "0") or "0"
     geo = config["Avito"].get("GEO", "") or ""
-    proxy = config["Avito"].get("PROXY", "")
-    proxy_change_ip = config["Avito"].get("PROXY_CHANGE_IP", "")
+    proxy = config["Avito"].get("PROXY", "aDyT3A:hYa5AKdAtruM@gproxy.site:10693")
+    proxy_change_url = config["Avito"].get("PROXY_CHANGE_IP", "https://changeip.mobileproxy.space/?proxy_key=0a74edb01bb5fb1dd3b845dad96f26d5")
     need_more_info = int(config["Avito"]["NEED_MORE_INFO"])
     fast_speed = int(config["Avito"]["FAST_SPEED"])
-    exact_address = config["Avito"].get("EXACT_ADDRESS", "")
 
     if proxy and "@" not in str(proxy):
         logger.info("Прокси переданы неправильно, нужно соблюдать формат user:pass@ip:port")
         proxy = proxy_change_ip = None
+    else:
+        logger.info("Используется SOCKS5 прокси с автоматической сменой IP")
 
     if token and chat_ids:
         for chat_id in chat_ids:
@@ -427,13 +569,11 @@ if __name__ == '__main__':
                 'parse_mode': 'markdown'
             }
             tg_handler = NotificationHandler("telegram", defaults=params)
-
-            """Все логи уровня SUCCESS и выше отсылаются в телегу"""
             logger.add(tg_handler, level="SUCCESS", format="{message}")
 
     while True:
         try:
-            AvitoParse(
+            parser = AvitoParse(
                 url=url,
                 count=int(num_ads),
                 keysword_list=keys if keys not in ([''], None) else None,
@@ -446,8 +586,17 @@ if __name__ == '__main__':
                 proxy_change_url=proxy_change_ip,
                 max_views=int(max_view) if max_view else None,
                 fast_speed=1 if fast_speed else 0,
-                exact_address=exact_address
-            ).parse()
+                report_id=report_id
+            )
+            
+            # Загружаем адреса из БД
+            asyncio.run(parser.load_addresses_from_db())
+            
+            if not parser.addresses:
+                logger.error("Не найдены адреса для обработки")
+                sys.exit(1)
+                
+            parser.parse()
             logger.info("Пауза")
             time.sleep(int(freq))
         except Exception as error:

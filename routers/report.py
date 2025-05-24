@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.datastructures import UploadFile as FastAPIUploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -10,6 +10,9 @@ import os
 from pathlib import Path
 import json
 from data_cleaning.parse_report import process_report
+import asyncio
+import sys
+import subprocess
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
@@ -141,11 +144,12 @@ async def upload_file(
 @router.post("/{report_id}/check")
 async def start_check(
     report_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_async_session),
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Запустить проверку отчета
+    Запустить проверку отчета и парсер Авито в отдельном процессе
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -188,10 +192,16 @@ async def start_check(
         
         await db.commit()
         
+        # Запускаем парсер Авито в отдельном процессе
+        script_path = os.path.join(os.path.dirname(__file__), "..", "avito", "parser_cls.py")
+        process = subprocess.Popen([sys.executable, script_path, str(report_id)])
+        
+        
         return {
-            "message": "Проверка завершена",
+            "message": "Проверка завершена, парсер Авито запущен в отдельном процессе",
             "processed_files": len(files),
-            "clients_count": report.all_count
+            "clients_count": report.all_count,
+            "parser_process_id": process.pid
         }
         
     except Exception as e:
