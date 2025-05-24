@@ -171,7 +171,7 @@ def process_report(file_path: str, report_id: int) -> List[Client]:
     clients_data = parse_report_file(file_path)
     return [
         Client(
-            **client_data,
+            **{k: v for k, v in client_data.items() if k != 'region'},
             report_id=report_id
         )
         for client_data in clients_data
