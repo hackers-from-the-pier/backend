@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from utils.models import Client
 import urllib.parse
-from fill_missing import fill_missing_by_group
+from .fill_missing import fill_missing_by_group
 
 # Устанавливаем опцию для будущего поведения pandas
 pd.set_option('future.no_silent_downcasting', True)
