@@ -78,6 +78,24 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         value = client_data.get(json_field)
         if json_field == 'isCommercial':
             parsed_data[model_field] = bool(value) if value is not None else False
+        elif json_field in ['roomsCount', 'residentsCount']:
+            # Для целочисленных полей
+            if value is not None:
+                try:
+                    parsed_data[model_field] = int(float(str(value).replace(',', '.')))
+                except (ValueError, TypeError):
+                    parsed_data[model_field] = None
+            else:
+                parsed_data[model_field] = None
+        elif json_field == 'totalArea':
+            # Для полей с плавающей точкой
+            if value is not None:
+                try:
+                    parsed_data[model_field] = float(str(value).replace(',', '.'))
+                except (ValueError, TypeError):
+                    parsed_data[model_field] = None
+            else:
+                parsed_data[model_field] = None
         else:
             parsed_data[model_field] = value
     
