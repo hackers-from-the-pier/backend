@@ -39,3 +39,25 @@ class File(Base): # загруженный файл
     is_parsed: Mapped[bool] = mapped_column(Boolean, default=False) # был ли ранее обработан
     report_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("reports.id")) # id отчета
     s3_url: Mapped[str] = mapped_column(Text) # url файла в s3
+
+class Client(Base): # клиент
+    __tablename__ = "clients"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True) # id клиента
+    name: Mapped[str] = mapped_column(Text, nullable=True) # имя клиента     
+    email: Mapped[str] = mapped_column(Text, nullable=True) # email клиента   
+    phone: Mapped[str] = mapped_column(Text, nullable=True) # телефон клиента 
+    address: Mapped[str] = mapped_column(Text, nullable=True) # адрес клиента
+    is_commercial: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False) # коммерческий клиент
+    home_type: Mapped[str] = mapped_column(Text, nullable=True) # тип дома
+    home_area: Mapped[float] = mapped_column(Float, nullable=True) # площадь дома м2
+    season_index: Mapped[float] = mapped_column(Float, nullable=True) # сезонный индекс
+    people_count: Mapped[int] = mapped_column(Integer, nullable=True) # количество жильцов
+    rooms_count: Mapped[int] = mapped_column(Integer, nullable=True) # количество комнат
+    
+    frod_state: Mapped[str] = mapped_column(Text, nullable=True) # Статус Фрода
+    frod_procentage: Mapped[float] = mapped_column(Float, nullable=True) # Процент фрода
+    frod_yandex: Mapped[str] = mapped_column(Text, nullable=True) # Яндекс ссылка на объект
+    frod_avito: Mapped[str] = mapped_column(Text, nullable=True) # Авито ссылка на объект
+    frod_2gis: Mapped[str] = mapped_column(Text, nullable=True) # 2GIS ссылка на объект
+    
