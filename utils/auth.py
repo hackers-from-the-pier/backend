@@ -13,8 +13,8 @@ from fastapi import Depends, HTTPException, status
 from utils.database import get_async_session, AsyncSession
 from pydantic import BaseModel
 
-from utils.config import JWT_SECRET, BOT_TOKEN
-from utils.models import ExpToken, User
+from utils.config import JWT_SECRET
+from utils.models import User
 from sqlalchemy import select, or_
 
 login_method_url = "/auth/jwt"
@@ -36,10 +36,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    exp_token = await session.get(ExpToken, payload.get("jti"))
-    if exp_token: 
-        er_id = uuid.uuid4().__str__()
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Token expired. Trace UUID: " + er_id)
+    #exp_token = await session.get(ExpToken, payload.get("jti"))
+    #if exp_token: 
+    #    er_id = uuid.uuid4().__str__()
+    #    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Token expired. Trace UUID: " + er_id)
     
     user_id = payload.get("subject", {}).get("user_id")
     if not user_id:
