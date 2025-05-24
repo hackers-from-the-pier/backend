@@ -1,15 +1,9 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
-from utils.auth import TelegramUser, verify_password, verify_telegram_webapp_data, parse_telegram_user, register_telegram_user, access_security
+from fastapi import APIRouter, Depends, HTTPException
+from utils.auth import verify_password, access_security
 from utils.database import get_async_session, AsyncSession
-from utils.models import User, OneTimeLink, UserRoleENUM, ReferralLink
-import json
-from urllib.parse import parse_qs, unquote
+from utils.models import User
 import pydantic
-from fastapi.responses import RedirectResponse
-from fastapi.security import OAuth2AuthorizationCodeBearer
 from sqlalchemy import select
-from datetime import datetime, timezone
 
 router = APIRouter(tags=["Авторизация"], prefix="/auth")
 
