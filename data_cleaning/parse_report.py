@@ -50,10 +50,17 @@ def fill_missing_with_median(df: pd.DataFrame, column: str, group_cols: List[str
     group_medians = df.groupby(group_cols)[column].transform('median')
     
     # Заполняем пропуски медианами с явным указанием типа
-    filled = df[column].fillna(group_medians).astype(dtype)
+    filled = df[column].fillna(group_medians)
     
-    # Заменяем NaN на None
-    return filled.apply(lambda x: None if pd.isna(x) else x)
+    # Преобразуем значения в нужный тип
+    if dtype == 'Int64':
+        # Для целочисленных полей
+        filled = filled.apply(lambda x: int(x) if pd.notna(x) else None)
+    else:
+        # Для полей с плавающей точкой
+        filled = filled.apply(lambda x: float(x) if pd.notna(x) else None)
+    
+    return filled
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -145,8 +152,23 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
             if col in df.columns:
                 df[col] = fill_missing_with_median(df, col)
         
-        # Преобразуем DataFrame обратно в список словарей, заменяя NaN на None
-        return df.apply(lambda x: x.apply(lambda y: None if pd.isna(y) else y)).to_dict('records')
+        # Преобразуем DataFrame обратно в список словарей
+        result = []
+        for _, row in df.iterrows():
+            record = {}
+            for col in df.columns:
+                value = row[col]
+                if pd.isna(value):
+                    record[col] = None
+                elif col in ['people_count', 'rooms_count']:
+                    record[col] = int(value) if value is not None else None
+                elif col in ['home_area', 'season_index', 'frod_procentage']:
+                    record[col] = float(value) if value is not None else None
+                else:
+                    record[col] = value
+            result.append(record)
+        
+        return result
         
     except Exception as e:
         print(f"Ошибка при парсинге файла {file_path}: {str(e)}")
