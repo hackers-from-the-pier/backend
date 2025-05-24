@@ -26,7 +26,7 @@ class Report(Base): # отчет
     __tablename__ = "reports"
     
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True, autoincrement=True)# id отчета
-    staff_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))# id пользователя
+    staff_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=True)# id пользователя
     is_ready: Mapped[bool] = mapped_column(Boolean, default=False)# готов ли отчет
     
     # Отношения
