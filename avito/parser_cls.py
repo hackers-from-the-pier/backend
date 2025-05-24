@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import threading
 import time
@@ -6,6 +7,9 @@ import re
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import asyncio
 from typing import List, Optional
+
+# Добавляем корневую директорию проекта в путь импорта
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
 from notifiers.logging import NotificationHandler
