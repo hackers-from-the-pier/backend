@@ -1,13 +1,14 @@
 import json
 from typing import List, Dict, Any, Optional
 import pandas as pd
+import numpy as np
 from utils.models import Client
 
 def convert_value(value: Any, target_type: type) -> Optional[Any]:
     """
     Конвертирует значение в нужный тип с обработкой ошибок
     """
-    if value is None:
+    if value is None or pd.isna(value) or np.isnan(value):
         return None
     
     try:
@@ -29,7 +30,9 @@ def fill_missing_with_median(df: pd.DataFrame, column: str, group_cols: List[str
     # Вычисляем медианы по группам
     group_medians = df.groupby(group_cols)[column].transform('median')
     # Заполняем пропуски медианами
-    return df[column].fillna(group_medians)
+    filled = df[column].fillna(group_medians)
+    # Заменяем NaN на None
+    return filled.replace({np.nan: None})
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -107,7 +110,8 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
             if col in df.columns:
                 df[col] = fill_missing_with_median(df, col)
         
-        return df.to_dict('records')
+        # Преобразуем DataFrame обратно в список словарей, заменяя NaN на None
+        return df.replace({np.nan: None}).to_dict('records')
         
     except Exception as e:
         print(f"Ошибка при парсинге файла {file_path}: {str(e)}")
