@@ -28,6 +28,7 @@ class Report(Base): # отчет
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True, autoincrement=True)# id отчета
     staff_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=True)# id пользователя
     is_ready: Mapped[bool] = mapped_column(Boolean, default=False)# готов ли отчет
+    all_count: Mapped[int] = mapped_column(Integer, nullable=True) # Сколько всего клиентов в отчёте?
     
     # Отношения
     staff: Mapped["User"] = relationship("User", back_populates="reports") # пользователь, который создал отчет
@@ -61,3 +62,4 @@ class Client(Base): # клиент
     frod_avito: Mapped[str] = mapped_column(Text, nullable=True) # Авито ссылка на объект
     frod_2gis: Mapped[str] = mapped_column(Text, nullable=True) # 2GIS ссылка на объект
     
+    report_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("reports.id"), nullable=True) # id отчета, из которого добавлен клиент
