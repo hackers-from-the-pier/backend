@@ -12,3 +12,4 @@ asyncpg
 pydantic-extra-types
 phonenumbers
 python-multipart
+boto3

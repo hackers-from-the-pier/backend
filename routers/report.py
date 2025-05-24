@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi.datastructures import UploadFile as FastAPIUploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional
@@ -19,7 +20,7 @@ from utils.config import (
     AWS_VIRTUAL_HOSTED_URL
 )
 
-router = APIRouter(prefix="/client", tags=["Клиенты"])
+router = APIRouter(prefix="/report", tags=["Отчеты"])
 
 class ClientResponse(BaseModel):
     id: int
@@ -91,7 +92,7 @@ async def create_report(
 @router.post("/{report_id}/upload", response_model=FileResponse)
 async def upload_file(
     report_id: int,
-    file: UploadFile = File(...),
+    file: FastAPIUploadFile = File(...),
     db: Session = Depends(get_async_session),
     current_user: User = Depends(get_current_user)
 ):
