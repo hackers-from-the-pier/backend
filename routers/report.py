@@ -6,19 +6,16 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
-import paramiko
 import os
-from io import BytesIO
+from pathlib import Path
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
 from utils.database import get_async_session
-from utils.config import (
-    FTP_HOST,
-    FTP_USERNAME,
-    FTP_PASSWORD,
-    FTP_BASE_URL
-)
+
+# Конфигурация путей
+UPLOAD_DIR = "/var/www/kilowatt/public/file"
+BASE_URL = "https://true.kilowattt.ru/file"
 
 router = APIRouter(prefix="/report", tags=["Отчеты"])
 
@@ -97,7 +94,7 @@ async def upload_file(
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузить файл в отчет через SFTP
+    Загрузить файл в отчет
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -105,39 +102,25 @@ async def upload_file(
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
     try:
+        # Создаем директорию, если её нет
+        Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+        
         # Генерируем уникальное имя файла
         file_extension = file.filename.split('.')[-1]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         filename = f"{timestamp}_{unique_id}.{file_extension}"
         
-        # Читаем содержимое файла
-        file_content = await file.read()
+        # Полный путь к файлу
+        file_path = os.path.join(UPLOAD_DIR, filename)
         
-        # Создаем SSH клиент
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
-        # Подключаемся к SFTP серверу
-        ssh.connect(
-            hostname=FTP_HOST.replace('ftp.', 'sftp.'),
-            username=FTP_USERNAME,
-            password=FTP_PASSWORD
-        )
-        
-        # Открываем SFTP сессию
-        sftp = ssh.open_sftp()
-        
-        # Загружаем файл
-        with sftp.file(filename, 'wb') as remote_file:
-            remote_file.write(file_content)
-        
-        # Закрываем соединения
-        sftp.close()
-        ssh.close()
+        # Сохраняем файл
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
         
         # Формируем URL для доступа к файлу
-        file_url = f"{FTP_BASE_URL}/{filename}"
+        file_url = f"{BASE_URL}/{filename}"
         
         # Создаем запись о файле в базе данных
         db_file = File(
