@@ -525,12 +525,13 @@ if __name__ == '__main__':
     import sys
 
     config = configparser.ConfigParser()
-    config.read("settings.ini", encoding="utf-8")
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
+    config.read(config_path, encoding="utf-8")
 
     try:
         url = config["Avito"]["URL"].split(",")
     except Exception:
-        with open('settings.ini', encoding="utf-8") as file:
+        with open(config_path, encoding="utf-8") as file:
             line_url = file.readlines()[1]
             regex = r"http.+"
             url = re.findall(regex, line_url)
