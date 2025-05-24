@@ -27,6 +27,15 @@ app = FastAPI(
     title="True Kilowatt API"
 )
 
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://true.kilowattt.ru"],  # Разрешаем запросы с этого домена
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешаем все HTTP методы
+    allow_headers=["*"],  # Разрешаем все заголовки
+)
+
 app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(client_router)
