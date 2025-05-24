@@ -11,6 +11,19 @@ from utils.models import User
 
 login_method_url = "/auth/jwt"
 
+class AccessSecurity:
+    def __init__(self, secret_key: str):
+        self.secret_key = secret_key
+
+    def create_access_token(self, subject: dict) -> str:
+        return jwt.encode(
+            claims={"subject": subject},
+            key=self.secret_key,
+            algorithm="HS256"
+        )
+
+access_security = AccessSecurity(JWT_SECRET)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=login_method_url + "/login")
 pwd_context = passlib.context.CryptContext(schemes=["bcrypt"], deprecated="auto")
 
