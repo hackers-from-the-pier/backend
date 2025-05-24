@@ -6,7 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
-from ftplib import FTP_TLS
+import paramiko
 import os
 from io import BytesIO
 
@@ -97,7 +97,7 @@ async def upload_file(
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузить файл в отчет через FTPS
+    Загрузить файл в отчет через SFTP
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -114,14 +114,27 @@ async def upload_file(
         # Читаем содержимое файла
         file_content = await file.read()
         
-        # Подключаемся к FTPS
-        ftps = FTP_TLS(FTP_HOST)
-        ftps.login(user=FTP_USERNAME, passwd=FTP_PASSWORD)
-        ftps.prot_p()  # Включаем защищенный режим передачи данных
+        # Создаем SSH клиент
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Подключаемся к SFTP серверу
+        ssh.connect(
+            hostname=FTP_HOST.replace('ftp.', 'sftp.'),
+            username=FTP_USERNAME,
+            password=FTP_PASSWORD
+        )
+        
+        # Открываем SFTP сессию
+        sftp = ssh.open_sftp()
         
         # Загружаем файл
-        ftps.storbinary(f'STOR {filename}', BytesIO(file_content))
-        ftps.quit()
+        with sftp.file(filename, 'wb') as remote_file:
+            remote_file.write(file_content)
+        
+        # Закрываем соединения
+        sftp.close()
+        ssh.close()
         
         # Формируем URL для доступа к файлу
         file_url = f"{FTP_BASE_URL}/{filename}"
