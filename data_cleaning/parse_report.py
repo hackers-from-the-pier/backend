@@ -4,11 +4,21 @@ import pandas as pd
 import numpy as np
 from utils.models import Client
 
+def is_nan_or_none(value: Any) -> bool:
+    """
+    Безопасная проверка на NaN или None
+    """
+    if value is None:
+        return True
+    if isinstance(value, (int, float)):
+        return pd.isna(value) or np.isnan(value)
+    return False
+
 def convert_value(value: Any, target_type: type) -> Optional[Any]:
     """
     Конвертирует значение в нужный тип с обработкой ошибок
     """
-    if value is None or pd.isna(value) or np.isnan(value):
+    if is_nan_or_none(value):
         return None
     
     try:
@@ -32,7 +42,7 @@ def fill_missing_with_median(df: pd.DataFrame, column: str, group_cols: List[str
     # Заполняем пропуски медианами
     filled = df[column].fillna(group_medians)
     # Заменяем NaN на None
-    return filled.replace({np.nan: None})
+    return filled.apply(lambda x: None if pd.isna(x) else x)
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -111,7 +121,7 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
                 df[col] = fill_missing_with_median(df, col)
         
         # Преобразуем DataFrame обратно в список словарей, заменяя NaN на None
-        return df.replace({np.nan: None}).to_dict('records')
+        return df.apply(lambda x: x.apply(lambda y: None if pd.isna(y) else y)).to_dict('records')
         
     except Exception as e:
         print(f"Ошибка при парсинге файла {file_path}: {str(e)}")
