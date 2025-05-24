@@ -141,6 +141,24 @@ async def upload_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке файла: {str(e)}")
 
+async def update_or_create_client(client_data: dict, db: AsyncSession) -> Client:
+    """
+    Обновляет существующего клиента или создает нового
+    """
+    # Проверяем существование клиента
+    query = select(Client).where(Client.id == client_data['id'])
+    result = await db.execute(query)
+    existing_client = result.scalar_one_or_none()
+    
+    if existing_client:
+        # Обновляем существующего клиента
+        for key, value in client_data.items():
+            setattr(existing_client, key, value)
+        return existing_client
+    else:
+        # Создаем нового клиента
+        return Client(**client_data)
+
 @router.post("/{report_id}/check")
 async def start_check(
     report_id: int,
@@ -177,10 +195,11 @@ async def start_check(
                     continue
                 
                 # Обрабатываем файл
-                clients = process_report(file_path, report_id)
+                clients_data = process_report(file_path, report_id)
                 
                 # Сохраняем клиентов в базу данных
-                for client in clients:
+                for client_data in clients_data:
+                    client = await update_or_create_client(client_data, db)
                     db.add(client)
                 
                 # Отмечаем файл как обработанный
@@ -188,14 +207,13 @@ async def start_check(
         
         # Обновляем статус отчета
         report.is_ready = True
-        report.all_count = len(clients) if 'clients' in locals() else 0
+        report.all_count = len(clients_data) if 'clients_data' in locals() else 0
         
         await db.commit()
         
         # Запускаем парсер Авито в отдельном процессе
         script_path = os.path.join(os.path.dirname(__file__), "..", "avito", "parser_cls.py")
         process = subprocess.Popen([sys.executable, script_path, str(report_id)])
-        
         
         return {
             "message": "Проверка завершена, парсер Авито запущен в отдельном процессе",
