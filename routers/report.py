@@ -120,9 +120,11 @@ async def upload_file(
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         region_name=AWS_REGION,
         config=boto3.session.Config(
-            s3={'addressing_style': 'virtual'},
-            signature_version='s3v4',
-            s3={'payload_signing_enabled': True}
+            s3={
+                'addressing_style': 'virtual',
+                'payload_signing_enabled': True
+            },
+            signature_version='s3v4'
         )
     )
     
