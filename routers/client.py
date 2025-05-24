@@ -31,16 +31,32 @@ class ClientResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/list", response_model=List[ClientResponse])
+@router.get("/list")
 async def get_all_clients(
+    offset: int = 0,
+    limit: int = 10,
     db: Session = Depends(get_async_session),
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Получить список всех клиентов
+    Получить список всех клиентов с пагинацией
     """
-    query = select(Client)
+    # Получаем общее количество клиентов
+    total_query = select(Client)
+    total_result = await db.execute(total_query)
+    total_clients = len(total_result.scalars().all())
+    
+    # Вычисляем общее количество страниц
+    total_pages = (total_clients + limit - 1) // limit
+    
+    # Получаем клиентов с пагинацией
+    query = select(Client).offset(offset).limit(limit)
     result = await db.execute(query)
     clients = result.scalars().all()
-    return clients
-
+    
+    return {
+        "clients": clients,
+        "total_pages": total_pages,
+        "current_page": offset // limit + 1,
+        "total_clients": total_clients
+    }

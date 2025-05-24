@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 from utils.models import Client
 
+# Устанавливаем опцию для будущего поведения pandas
+pd.set_option('future.no_silent_downcasting', True)
+
 def is_nan_or_none(value: Any) -> bool:
     """
     Безопасная проверка на NaN или None
@@ -37,10 +40,18 @@ def fill_missing_with_median(df: pd.DataFrame, column: str, group_cols: List[str
     """
     Заполняет пропущенные значения медианными значениями по группам
     """
+    # Определяем тип данных для колонки
+    if column in ['people_count', 'rooms_count']:
+        dtype = 'Int64'  # nullable integer
+    else:
+        dtype = 'float64'
+    
     # Вычисляем медианы по группам
     group_medians = df.groupby(group_cols)[column].transform('median')
-    # Заполняем пропуски медианами
-    filled = df[column].fillna(group_medians)
+    
+    # Заполняем пропуски медианами с явным указанием типа
+    filled = df[column].fillna(group_medians).astype(dtype)
+    
     # Заменяем NaN на None
     return filled.apply(lambda x: None if pd.isna(x) else x)
 
