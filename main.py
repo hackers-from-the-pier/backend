@@ -22,7 +22,7 @@ def get_git_commit_id() -> str:
         return "unknown"
     
 app = FastAPI(
-    root_path=f"/api/{API_VERSION}",
+    root_path=f"/{API_VERSION}",
     version="#"+get_git_commit_id()[:7],
     title="True Kilowatt API"
 )
