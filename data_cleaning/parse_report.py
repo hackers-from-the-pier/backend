@@ -3,6 +3,8 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 import numpy as np
 from utils.models import Client
+import urllib.parse
+from fill_missing import fill_missing_by_group
 
 # Устанавливаем опцию для будущего поведения pandas
 pd.set_option('future.no_silent_downcasting', True)
@@ -36,31 +38,16 @@ def convert_value(value: Any, target_type: type) -> Optional[Any]:
     except (ValueError, TypeError):
         return None
 
-def fill_missing_with_median(df: pd.DataFrame, column: str, group_cols: List[str] = ['home_type']) -> pd.Series:
+def generate_2gis_url(address: str) -> str:
     """
-    Заполняет пропущенные значения медианными значениями по группам
+    Генерирует URL для поиска адреса в 2GIS
     """
-    # Определяем тип данных для колонки
-    if column in ['people_count', 'rooms_count']:
-        dtype = 'Int64'  # nullable integer
-    else:
-        dtype = 'float64'
+    if not address:
+        return None
     
-    # Вычисляем медианы по группам
-    group_medians = df.groupby(group_cols)[column].transform('median')
-    
-    # Заполняем пропуски медианами с явным указанием типа
-    filled = df[column].fillna(group_medians)
-    
-    # Преобразуем значения в нужный тип
-    if dtype == 'Int64':
-        # Для целочисленных полей
-        filled = filled.apply(lambda x: int(x) if pd.notna(x) else None)
-    else:
-        # Для полей с плавающей точкой
-        filled = filled.apply(lambda x: float(x) if pd.notna(x) else None)
-    
-    return filled
+    base_url = "https://2gis.ru/novorossiysk/search/"
+    encoded_address = urllib.parse.quote(address)
+    return f"{base_url}{encoded_address}"
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -116,7 +103,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'frod_procentage': None,
         'frod_yandex': None,
         'frod_avito': None,
-        'frod_2gis': None
+        'frod_2gis': generate_2gis_url(parsed_data.get('address'))
     }
     parsed_data.update(additional_fields)
     
@@ -146,11 +133,14 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
         # Преобразуем в DataFrame для заполнения пропусков
         df = pd.DataFrame(clients_data)
         
+        # Извлекаем регион из адреса
+        df['region'] = df['address'].apply(lambda x: x.split(',')[0].strip() if pd.notna(x) and ',' in x else 'Unknown')
+        
         # Заполняем пропуски медианными значениями для числовых полей
         numeric_columns = ['home_area', 'season_index', 'people_count', 'rooms_count', 'frod_procentage']
         for col in numeric_columns:
             if col in df.columns:
-                df[col] = fill_missing_with_median(df, col)
+                df = fill_missing_by_group(df, col, group_cols=['home_type', 'region'])
         
         # Преобразуем DataFrame обратно в список словарей
         result = []

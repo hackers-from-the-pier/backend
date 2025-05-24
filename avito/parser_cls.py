@@ -39,7 +39,8 @@ class AvitoParse:
                  proxy_change_url: str = None,
                  stop_event=None,
                  max_views: int = None,
-                 fast_speed: int = 0
+                 fast_speed: int = 0,
+                 exact_address: str = None
                  ):
         self.url_list = url
         self.url = None
@@ -61,6 +62,7 @@ class AvitoParse:
         self.db_handler = SQLiteDBHandler()
         self.xlsx_handler = XLSXHandler(self.title_file)
         self.fast_speed = fast_speed
+        self.exact_address = exact_address
 
     @property
     def use_proxy(self) -> bool:
@@ -75,6 +77,27 @@ class AvitoParse:
             time.sleep(random.randint(300, 350))
 
     def __get_url(self):
+        """Модифицированный метод для работы с точным адресом"""
+        if self.exact_address:
+            # Добавляем параметры адреса к URL
+            parsed_url = urlparse(self.url)
+            query_params = parse_qs(parsed_url.query)
+            
+            # Добавляем параметры адреса
+            query_params['address'] = [self.exact_address]
+            query_params['radius'] = ['0']  # Точное совпадение
+            
+            # Формируем новый URL
+            new_query = urlencode(query_params, doseq=True)
+            self.url = urlunparse((
+                parsed_url.scheme,
+                parsed_url.netloc,
+                parsed_url.path,
+                parsed_url.params,
+                new_query,
+                parsed_url.fragment
+            ))
+        
         logger.info(f"Открываю страницу: {self.url}")
         self.driver.get(self.url)
 
@@ -269,24 +292,26 @@ class AvitoParse:
             logger.debug("Не дождался загрузки страницы")
             return data
 
-        """Гео"""
-        if self.driver.find_elements(LocatorAvito.GEO[1], by="css selector"):
+        # Проверяем точный адрес
+        if self.exact_address and self.driver.find_elements(LocatorAvito.GEO[1], by="css selector"):
             geo = self.driver.find_element(LocatorAvito.GEO[1], by="css selector").text
             data["geo"] = geo.lower()
+            
+            # Если адрес не совпадает точно, пропускаем объявление
+            if self.exact_address.lower() not in geo.lower():
+                return None
 
-        """Количество просмотров"""
+        # Остальной код метода остается без изменений
         if self.driver.find_elements(LocatorAvito.TOTAL_VIEWS[1], by="css selector"):
             total_views = self.driver.find_element(LocatorAvito.TOTAL_VIEWS[1]).text.split()[0]
             data["views"] = total_views
 
-        """Дата публикации"""
         if self.driver.find_elements(LocatorAvito.DATE_PUBLIC[1], by="css selector"):
             date_public = self.driver.find_element(LocatorAvito.DATE_PUBLIC[1], by="css selector").text
             if "· " in date_public:
                 date_public = date_public.replace("· ", '')
             data["date_public"] = date_public
 
-        """Имя продавца"""
         if self.driver.find_elements(LocatorAvito.SELLER_NAME[1], by="css selector"):
             seller_name = self.driver.find_element(LocatorAvito.SELLER_NAME[1], by="css selector").text
             data["seller_name"] = seller_name
@@ -388,6 +413,7 @@ if __name__ == '__main__':
     proxy_change_ip = config["Avito"].get("PROXY_CHANGE_IP", "")
     need_more_info = int(config["Avito"]["NEED_MORE_INFO"])
     fast_speed = int(config["Avito"]["FAST_SPEED"])
+    exact_address = config["Avito"].get("EXACT_ADDRESS", "")
 
     if proxy and "@" not in str(proxy):
         logger.info("Прокси переданы неправильно, нужно соблюдать формат user:pass@ip:port")
@@ -419,7 +445,8 @@ if __name__ == '__main__':
                 proxy=proxy,
                 proxy_change_url=proxy_change_ip,
                 max_views=int(max_view) if max_view else None,
-                fast_speed=1 if fast_speed else 0
+                fast_speed=1 if fast_speed else 0,
+                exact_address=exact_address
             ).parse()
             logger.info("Пауза")
             time.sleep(int(freq))
