@@ -60,7 +60,7 @@ router = APIRouter(prefix="/report", tags=["Отчеты"])
 
 class ReportResponse(BaseModel):
     id: int
-    staff_id: int
+    staff_id: Optional[int] = None
     is_ready: bool
 
     class Config:
