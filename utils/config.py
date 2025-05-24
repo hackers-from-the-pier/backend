@@ -14,3 +14,6 @@ API_HOST = os.environ.get("API_HOST", "0.0.0.0")
 API_PORT = os.environ.get("API_PORT", "8000")
 API_VERSION = os.environ.get("API_VERSION", "v1")   
 API_RELOAD =    os.environ.get("API_RELOAD", "True").lower() == "true"
+
+# JWT settings
+JWT_SECRET = os.environ.get("JWT_SECRET")
