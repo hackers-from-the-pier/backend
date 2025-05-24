@@ -120,15 +120,21 @@ async def upload_file(
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         region_name=AWS_REGION,
         config=boto3.session.Config(
-            s3={'addressing_style': 'virtual'}
+            s3={'addressing_style': 'virtual'},
+            signature_version='s3v4',
+            s3={'payload_signing_enabled': True}
         )
     )
     
     try:
+        # Сбрасываем указатель файла в начало
+        await file.seek(0)
+        
         s3_client.upload_fileobj(
             file.file,
             AWS_BUCKET_NAME,
-            unique_filename
+            unique_filename,
+            ExtraArgs={'ContentType': file.content_type}
         )
         # Используем virtual hosted style URL
         s3_url = f"{AWS_VIRTUAL_HOSTED_URL}/{unique_filename}"
