@@ -7,6 +7,8 @@ from pydantic import BaseModel
 import boto3
 from botocore.exceptions import ClientError
 import uuid
+from datetime import datetime
+from io import BytesIO
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
@@ -89,6 +91,14 @@ async def create_report(
     await db.refresh(report)
     return report
 
+# Конфигурация S3
+S3_CONFIG = {
+    'endpoint_url': AWS_ENDPOINT_URL,
+    'aws_access_key_id': AWS_ACCESS_KEY_ID,
+    'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
+    'bucket_name': AWS_BUCKET_NAME
+}
+
 @router.post("/{report_id}/upload", response_model=FileResponse)
 async def upload_file(
     report_id: int,
@@ -104,42 +114,34 @@ async def upload_file(
     if not report:
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
-    # Проверяем права доступа
-    #if report.staff_id != current_user.id:
-    #    raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
-
-    # Генерируем уникальное имя файла
-    file_extension = file.filename.split('.')[-1]
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    
-    # Загружаем файл в S3 Beget
-    s3_client = boto3.client(
-        's3',
-        endpoint_url=AWS_ENDPOINT_URL,
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        region_name=AWS_REGION,
-        config=boto3.session.Config(
-            s3={
-                'addressing_style': 'virtual',
-                'payload_signing_enabled': True
-            },
-            signature_version='s3v4'
-        )
-    )
-    
     try:
-        # Сбрасываем указатель файла в начало
-        await file.seek(0)
+        # Создаем клиент S3
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=S3_CONFIG['endpoint_url'],
+            aws_access_key_id=S3_CONFIG['aws_access_key_id'],
+            aws_secret_access_key=S3_CONFIG['aws_secret_access_key']
+        )
         
+        # Генерируем уникальное имя файла
+        file_extension = file.filename.split('.')[-1]
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"reports/{timestamp}_{unique_id}.{file_extension}"
+        
+        # Читаем содержимое файла
+        file_content = await file.read()
+        
+        # Загружаем файл в S3
         s3_client.upload_fileobj(
-            file.file,
-            AWS_BUCKET_NAME,
-            unique_filename,
+            BytesIO(file_content),
+            S3_CONFIG['bucket_name'],
+            filename,
             ExtraArgs={'ContentType': file.content_type}
         )
-        # Используем virtual hosted style URL
-        s3_url = f"{AWS_VIRTUAL_HOSTED_URL}/{unique_filename}"
+        
+        # Формируем URL для доступа к файлу
+        s3_url = f"{S3_CONFIG['endpoint_url']}/{S3_CONFIG['bucket_name']}/{filename}"
         
         # Создаем запись о файле в базе данных
         db_file = File(
@@ -152,7 +154,7 @@ async def upload_file(
         
         return db_file
         
-    except ClientError as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке файла: {str(e)}")
 
 @router.post("/{report_id}/check")
