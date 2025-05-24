@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -38,6 +39,8 @@ async def get_all_clients(
     """
     Получить список всех клиентов
     """
-    clients = db.query(Client).all()
+    query = select(Client)
+    result = await db.execute(query)
+    clients = result.scalars().all()
     return clients
 
