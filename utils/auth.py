@@ -1,21 +1,13 @@
-import json
 import uuid
-import hmac
-import hashlib
-from urllib.parse import parse_qs
 from jose import jwt, JWTError, ExpiredSignatureError
 import passlib.context
-from typing import Annotated, Optional
-from datetime import timedelta
-from fastapi_jwt import JwtAccessBearer
+from typing import Annotated
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
 from utils.database import get_async_session, AsyncSession
-from pydantic import BaseModel
 
 from utils.config import JWT_SECRET
 from utils.models import User
-from sqlalchemy import select, or_
 
 login_method_url = "/auth/jwt"
 
