@@ -60,44 +60,40 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     Извлекает данные клиента из JSON и преобразует их в формат модели Client
     с обработкой пропущенных значений и конвертацией типов
     """
-    # Определяем типы полей из модели Client
-    field_types = {
-        'name': str,
-        'email': str,
-        'phone': str,
-        'address': str,
-        'is_commercial': bool,
-        'home_type': str,
-        'home_area': float,
-        'season_index': float,
-        'people_count': int,
-        'rooms_count': int,
-        'frod_state': str,
-        'frod_procentage': float,
-        'frod_yandex': str,
-        'frod_avito': str,
-        'frod_2gis': str
+    # Маппинг полей из входного JSON в поля модели
+    field_mapping = {
+        'accountId': 'id',
+        'isCommercial': 'is_commercial',
+        'address': 'address',
+        'buildingType': 'home_type',
+        'roomsCount': 'rooms_count',
+        'residentsCount': 'people_count',
+        'totalArea': 'home_area'
     }
     
     parsed_data = {}
     
-    for field, field_type in field_types.items():
-        # Получаем значение из входных данных
-        value = client_data.get(field)
-        
-        # Конвертируем значение в нужный тип
-        converted_value = convert_value(value, field_type)
-        
-        # Для числовых полей проверяем на отрицательные значения
-        if field_type in (int, float) and converted_value is not None:
-            if converted_value < 0:
-                converted_value = None
-        
-        # Для строковых полей проверяем на пустые строки
-        if field_type == str and converted_value == "":
-            converted_value = None
-            
-        parsed_data[field] = converted_value
+    # Обрабатываем основные поля
+    for json_field, model_field in field_mapping.items():
+        value = client_data.get(json_field)
+        if json_field == 'isCommercial':
+            parsed_data[model_field] = bool(value) if value is not None else False
+        else:
+            parsed_data[model_field] = value
+    
+    # Добавляем поля, которых нет во входных данных
+    additional_fields = {
+        'name': None,
+        'email': None,
+        'phone': None,
+        'season_index': None,
+        'frod_state': None,
+        'frod_procentage': None,
+        'frod_yandex': None,
+        'frod_avito': None,
+        'frod_2gis': None
+    }
+    parsed_data.update(additional_fields)
     
     return parsed_data
 
