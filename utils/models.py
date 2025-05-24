@@ -56,6 +56,13 @@ class Client(Base): # клиент
     people_count: Mapped[int] = mapped_column(Integer, nullable=True) # количество жильцов
     rooms_count: Mapped[int] = mapped_column(Integer, nullable=True) # количество комнат
     
+    summary_electricity: Mapped[float] = mapped_column(Float, nullable=True) # суммарное потребление за год (кВт⋅ч)
+    avg_monthly_electricity: Mapped[float] = mapped_column(Float, nullable=True) # среднее потребление в месяц (кВт⋅ч)
+    max_monthly_electricity: Mapped[float] = mapped_column(Float, nullable=True) # максимальное потребление за месяц (кВт⋅ч)
+    min_monthly_electricity: Mapped[float] = mapped_column(Float, nullable=True) # минимальное потребление за месяц (кВт⋅ч)
+    electricity_per_sqm: Mapped[float] = mapped_column(Float, nullable=True) # потребление на 1 м² (кВт⋅ч/м²)
+    electricity_per_person: Mapped[float] = mapped_column(Float, nullable=True) # потребление на 1 человека (кВт⋅ч/чел)
+    
     frod_state: Mapped[str] = mapped_column(Text, nullable=True) # Статус Фрода
     frod_procentage: Mapped[float] = mapped_column(Float, nullable=True) # Процент фрода
     frod_yandex: Mapped[str] = mapped_column(Text, nullable=True) # Яндекс ссылка на объект

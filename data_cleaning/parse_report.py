@@ -1,5 +1,6 @@
 import json
 from typing import List, Dict, Any, Optional
+from faker import Faker
 import pandas as pd
 import numpy as np
 from utils.models import Client
@@ -85,7 +86,8 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
             # Для полей с плавающей точкой
             if value is not None:
                 try:
-                    parsed_data[model_field] = float(str(value).replace(',', '.'))
+                    # Округляем до 2 знаков после запятой
+                    parsed_data[model_field] = round(float(str(value).replace(',', '.')), 2)
                 except (ValueError, TypeError):
                     parsed_data[model_field] = None
             else:
@@ -93,13 +95,43 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             parsed_data[model_field] = value
     
+    # Расчет метрик потребления электроэнергии
+    consumption = client_data.get('consumption', {})
+    if consumption:
+        # Преобразуем значения в числа и фильтруем None
+        monthly_values = [float(v) for v in consumption.values() if v is not None]
+        
+        if monthly_values:
+            # Суммарное потребление за год
+            parsed_data['summary_electricity'] = round(sum(monthly_values), 2)
+            
+            # Среднее потребление в месяц
+            parsed_data['avg_monthly_electricity'] = round(sum(monthly_values) / len(monthly_values), 2)
+            
+            # Максимальное потребление за месяц
+            parsed_data['max_monthly_electricity'] = round(max(monthly_values), 2)
+            
+            # Минимальное потребление за месяц
+            parsed_data['min_monthly_electricity'] = round(min(monthly_values), 2)
+            
+            # Потребление на 1 м²
+            if parsed_data.get('home_area'):
+                parsed_data['electricity_per_sqm'] = round(parsed_data['summary_electricity'] / parsed_data['home_area'], 2)
+            
+            # Потребление на 1 человека
+            if parsed_data.get('people_count'):
+                parsed_data['electricity_per_person'] = round(parsed_data['summary_electricity'] / parsed_data['people_count'], 2)
+    
+    # Инициализируем Faker с русской локалью
+    fake = Faker('ru_RU')
+    
     # Добавляем поля, которых нет во входных данных
     additional_fields = {
-        'name': None,
-        'email': None,
-        'phone': None,
+        'name': fake.name(),  # Генерируем ФИО
+        'email': fake.email(),  # Генерируем email
+        'phone': fake.phone_number(),  # Генерируем телефон
         'season_index': None,
-        'frod_state': None,
+        'frod_state': "Оценивается",
         'frod_procentage': None,
         'frod_yandex': None,
         'frod_avito': None,
