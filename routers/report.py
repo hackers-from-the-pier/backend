@@ -109,7 +109,7 @@ async def upload_file(
         file_extension = file.filename.split('.')[-1]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
-        filename = f"reports/{timestamp}_{unique_id}.{file_extension}"
+        filename = f"{timestamp}_{unique_id}.{file_extension}"
         
         # Читаем содержимое файла
         file_content = await file.read()
@@ -118,12 +118,6 @@ async def upload_file(
         ftps = FTP_TLS(FTP_HOST)
         ftps.login(user=FTP_USERNAME, passwd=FTP_PASSWORD)
         ftps.prot_p()  # Включаем защищенный режим передачи данных
-        
-        # Создаем директорию reports, если её нет
-        try:
-            ftps.mkd('reports')
-        except:
-            pass  # Директория уже существует
         
         # Загружаем файл
         ftps.storbinary(f'STOR {filename}', BytesIO(file_content))
