@@ -78,12 +78,12 @@ class FileResponse(BaseModel):
 @router.post("/create", response_model=ReportResponse)
 async def create_report(
     db: Session = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    #current_user: User = Depends(get_current_user)
 ):
     """
     Создать новый отчет
     """
-    report = Report(staff_id=current_user.id)
+    report = Report()
     db.add(report)
     await db.commit()
     await db.refresh(report)
@@ -94,7 +94,7 @@ async def upload_file(
     report_id: int,
     file: UploadFile,
     db: Session = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    #current_user: User = Depends(get_current_user)
 ):
     """
     Загрузить файл в отчет
@@ -105,8 +105,8 @@ async def upload_file(
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
     # Проверяем права доступа
-    if report.staff_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
+    #if report.staff_id != current_user.id:
+    #    raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
 
     # Генерируем уникальное имя файла
     file_extension = file.filename.split('.')[-1]
@@ -151,7 +151,7 @@ async def upload_file(
 async def start_check(
     report_id: int,
     db: Session = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    #current_user: User = Depends(get_current_user)
 ):
     """
     Запустить проверку отчета
@@ -162,8 +162,8 @@ async def start_check(
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
     # Проверяем права доступа
-    if report.staff_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
+    #if report.staff_id != current_user.id:
+    #    raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
     
     # TODO: Здесь будет логика запуска проверки
     # Например, отправка задачи в очередь или запуск асинхронного процесса
@@ -173,12 +173,12 @@ async def start_check(
 @router.get("/list", response_model=List[ReportResponse])
 async def get_all_reports(
     db: Session = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    #current_user: User = Depends(get_current_user)
 ):
     """
     Получить список всех отчетов пользователя
     """
-    query = select(Report).where(Report.staff_id == current_user.id)
+    query = select(Report)#.where(Report.staff_id == current_user.id)
     result = await db.execute(query)
     reports = result.scalars().all()
     return reports
