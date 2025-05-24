@@ -6,7 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
-from ftplib import FTP
+from ftplib import FTP_TLS
 import os
 from io import BytesIO
 
@@ -97,7 +97,7 @@ async def upload_file(
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузить файл в отчет через FTP
+    Загрузить файл в отчет через FTPS
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -114,19 +114,20 @@ async def upload_file(
         # Читаем содержимое файла
         file_content = await file.read()
         
-        # Подключаемся к FTP
-        ftp = FTP(FTP_HOST)
-        ftp.login(user=FTP_USERNAME, passwd=FTP_PASSWORD)
+        # Подключаемся к FTPS
+        ftps = FTP_TLS(FTP_HOST)
+        ftps.login(user=FTP_USERNAME, passwd=FTP_PASSWORD)
+        ftps.prot_p()  # Включаем защищенный режим передачи данных
         
         # Создаем директорию reports, если её нет
         try:
-            ftp.mkd('reports')
+            ftps.mkd('reports')
         except:
             pass  # Директория уже существует
         
         # Загружаем файл
-        ftp.storbinary(f'STOR {filename}', BytesIO(file_content))
-        ftp.quit()
+        ftps.storbinary(f'STOR {filename}', BytesIO(file_content))
+        ftps.quit()
         
         # Формируем URL для доступа к файлу
         file_url = f"{FTP_BASE_URL}/{filename}"
