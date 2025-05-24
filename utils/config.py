@@ -17,3 +17,12 @@ API_RELOAD =    os.environ.get("API_RELOAD", "True").lower() == "true"
 
 # JWT settings
 JWT_SECRET = os.environ.get("JWT_SECRET")
+
+# AWS S3 Beget configuration
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+AWS_BUCKET_NAME = os.environ.get("AWS_BUCKET_NAME")
+AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL")
+AWS_REGION = os.environ.get("AWS_REGION")
+AWS_PATH_STYLE_URL = f"{AWS_ENDPOINT_URL}/{AWS_BUCKET_NAME}"
+AWS_VIRTUAL_HOSTED_URL = f"https://{AWS_BUCKET_NAME}.s3.ru1.storage.beget.cloud"
