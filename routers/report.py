@@ -92,7 +92,7 @@ async def create_report(
 @router.post("/{report_id}/upload", response_model=FileResponse)
 async def upload_file(
     report_id: int,
-    file: UploadFile = File(...),
+    file: UploadFile,
     db: Session = Depends(get_async_session),
     current_user: User = Depends(get_current_user)
 ):
