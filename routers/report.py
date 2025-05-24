@@ -4,22 +4,20 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
-import boto3
-from botocore.exceptions import ClientError
 import uuid
 from datetime import datetime
+from ftplib import FTP
+import os
 from io import BytesIO
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
 from utils.database import get_async_session
 from utils.config import (
-    AWS_ACCESS_KEY_ID, 
-    AWS_SECRET_ACCESS_KEY, 
-    AWS_BUCKET_NAME,
-    AWS_ENDPOINT_URL,
-    AWS_REGION,
-    AWS_VIRTUAL_HOSTED_URL
+    FTP_HOST,
+    FTP_USERNAME,
+    FTP_PASSWORD,
+    FTP_BASE_URL
 )
 
 router = APIRouter(prefix="/report", tags=["Отчеты"])
@@ -91,14 +89,6 @@ async def create_report(
     await db.refresh(report)
     return report
 
-# Конфигурация S3
-S3_CONFIG = {
-    'endpoint_url': AWS_ENDPOINT_URL,
-    'aws_access_key_id': AWS_ACCESS_KEY_ID,
-    'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
-    'bucket_name': AWS_BUCKET_NAME
-}
-
 @router.post("/{report_id}/upload", response_model=FileResponse)
 async def upload_file(
     report_id: int,
@@ -107,7 +97,7 @@ async def upload_file(
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузить файл в отчет
+    Загрузить файл в отчет через FTP
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -115,14 +105,6 @@ async def upload_file(
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
     try:
-        # Создаем клиент S3
-        s3_client = boto3.client(
-            's3',
-            endpoint_url=S3_CONFIG['endpoint_url'],
-            aws_access_key_id=S3_CONFIG['aws_access_key_id'],
-            aws_secret_access_key=S3_CONFIG['aws_secret_access_key']
-        )
-        
         # Генерируем уникальное имя файла
         file_extension = file.filename.split('.')[-1]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -132,21 +114,27 @@ async def upload_file(
         # Читаем содержимое файла
         file_content = await file.read()
         
-        # Загружаем файл в S3
-        s3_client.upload_fileobj(
-            BytesIO(file_content),
-            S3_CONFIG['bucket_name'],
-            filename,
-            ExtraArgs={'ContentType': file.content_type}
-        )
+        # Подключаемся к FTP
+        ftp = FTP(FTP_HOST)
+        ftp.login(user=FTP_USERNAME, passwd=FTP_PASSWORD)
+        
+        # Создаем директорию reports, если её нет
+        try:
+            ftp.mkd('reports')
+        except:
+            pass  # Директория уже существует
+        
+        # Загружаем файл
+        ftp.storbinary(f'STOR {filename}', BytesIO(file_content))
+        ftp.quit()
         
         # Формируем URL для доступа к файлу
-        s3_url = f"{S3_CONFIG['endpoint_url']}/{S3_CONFIG['bucket_name']}/{filename}"
+        file_url = f"{FTP_BASE_URL}/{filename}"
         
         # Создаем запись о файле в базе данных
         db_file = File(
             report_id=report_id,
-            s3_url=s3_url
+            s3_url=file_url  # Используем то же поле, просто меняем URL
         )
         db.add(db_file)
         await db.commit()

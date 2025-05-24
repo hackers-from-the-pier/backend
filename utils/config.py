@@ -26,3 +26,9 @@ AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL")
 AWS_REGION = os.environ.get("AWS_REGION")
 AWS_PATH_STYLE_URL = f"{AWS_ENDPOINT_URL}/{AWS_BUCKET_NAME}"
 AWS_VIRTUAL_HOSTED_URL = f"https://{AWS_BUCKET_NAME}.s3.ru1.storage.beget.cloud"
+
+# FTP Configuration
+FTP_HOST = os.getenv('FTP_HOST', 'ftp.ru1.storage.beget.cloud')
+FTP_USERNAME = os.getenv('FTP_USERNAME')
+FTP_PASSWORD = os.getenv('FTP_PASSWORD')
+FTP_BASE_URL = os.getenv('FTP_BASE_URL', 'https://ru1.storage.beget.cloud')
