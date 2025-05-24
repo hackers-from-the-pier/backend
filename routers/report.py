@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime
 import os
 from pathlib import Path
+import json
+from data_cleaning.parse_report import process_report
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
@@ -150,14 +152,51 @@ async def start_check(
     if not report:
         raise HTTPException(status_code=404, detail="Отчет не найден")
     
-    # Проверяем права доступа
-    #if report.staff_id != current_user.id:
-    #    raise HTTPException(status_code=403, detail="Нет доступа к этому отчету")
+    # Получаем все файлы отчета
+    query = select(File).where(File.report_id == report_id)
+    result = await db.execute(query)
+    files = result.scalars().all()
     
-    # TODO: Здесь будет логика запуска проверки
-    # Например, отправка задачи в очередь или запуск асинхронного процесса
+    if not files:
+        raise HTTPException(status_code=404, detail="Файлы отчета не найдены")
     
-    return {"message": "Проверка запущена"}
+    try:
+        # Обрабатываем каждый файл
+        for file in files:
+            if not file.is_parsed:
+                # Получаем путь к файлу из URL
+                filename = file.s3_url.split('/')[-1]
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                
+                # Проверяем существование файла
+                if not os.path.exists(file_path):
+                    continue
+                
+                # Обрабатываем файл
+                clients = process_report(file_path, report_id)
+                
+                # Сохраняем клиентов в базу данных
+                for client in clients:
+                    db.add(client)
+                
+                # Отмечаем файл как обработанный
+                file.is_parsed = True
+        
+        # Обновляем статус отчета
+        report.is_ready = True
+        report.all_count = len(clients) if 'clients' in locals() else 0
+        
+        await db.commit()
+        
+        return {
+            "message": "Проверка завершена",
+            "processed_files": len(files),
+            "clients_count": report.all_count
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при обработке отчета: {str(e)}")
 
 @router.get("/list", response_model=List[ReportResponse])
 async def get_all_reports(
