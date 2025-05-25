@@ -41,7 +41,11 @@ async def get_commercial_addresses(report_id: int, session: AsyncSession) -> Lis
 
 async def update_client_avito_link(client_id: int, avito_link: str, session: AsyncSession):
     """Обновление ссылки на Авито для клиента"""
-    query = update(Client).where(Client.id == client_id).values(frod_avito=avito_link)
+    query = update(Client).where(Client.id == client_id).values(
+        frod_avito=avito_link,
+        frod_procentage=Client.frod_procentage + 30,
+        frod_state="Требует внимания"
+    )
     await session.execute(query)
     await session.commit()
 
