@@ -8,8 +8,10 @@ from utils.models import Client
 import urllib.parse
 from .fill_missing import fill_missing_by_group
 import logging
+from urllib.parse import quote
 
 # Настройка логирования
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Устанавливаем опцию для будущего поведения pandas
@@ -46,66 +48,49 @@ def convert_value(value: Any, target_type: type) -> Optional[Any]:
 
 def generate_2gis_url(address: str) -> str:
     """
-    Генерирует URL для поиска адреса в 2GIS и проверяет наличие признаков гостиничного бизнеса
+    Генерирует URL для поиска адреса в 2GIS
     """
     if not address:
         return None
-    
+        
     logger.info(f"Генерация 2GIS URL для адреса: {address}")
-    base_url = "https://2gis.ru/novorossiysk/search/"
-    encoded_address = urllib.parse.quote(address)
     
-    # Настройка прокси SOCKS5
-    proxies = {
-        'http': 'socks5://aDyT3A:hYa5AKdAtruM@gproxy.site:10693',
-        'https': 'socks5://aDyT3A:hYa5AKdAtruM@gproxy.site:10693'
-    }
+    # Кодируем адрес для URL
+    encoded_address = quote(address)
+    url = f"https://2gis.ru/novorossiysk/search/{encoded_address}"
     
-    # Заголовки для имитации реального браузера
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0'
-    }
-    
-    # Получаем HTML-код страницы через прокси
     try:
         logger.info(f"Отправка запроса к 2GIS для адреса: {address}")
-        response = requests.get(
-            f"{base_url}{encoded_address}",
-            headers=headers,
-            proxies=proxies,
-            timeout=10
-        )
-        html_content = response.text.lower()
+        response = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive'
+        })
         
-        logger.info(html_content)
+        # Проверяем статус ответа
+        if response.status_code == 200:
+            # Декодируем контент с правильной кодировкой
+            content = response.content.decode('utf-8')
+            
+            # Проверяем наличие ключевых фраз
+            hotel_phrases = [
+                'гостиница', 'отель', 'хостел', 'апартаменты',
+                'сдается', 'аренда', 'проживание', 'номер',
+                'почасовая', 'посуточная', 'мини-отель'
+            ]
+            
+            content_lower = content.lower()
+            for phrase in hotel_phrases:
+                if phrase in content_lower:
+                    return url
+                    
+        return None
         
-        # Список ключевых фраз для проверки
-        hotel_phrases = [
-            'гостиница', 'отель', 'хостел', 'апартаменты',
-            'сдается', 'аренда', 'проживание', 'номер',
-            'почасовая', 'посуточная', 'мини-отель'
-        ]
-        
-        # Проверяем наличие ключевых фраз
-        for phrase in hotel_phrases:
-            if phrase in html_content:
-                logger.info(f"Найдены признаки гостиничного бизнеса для адреса: {address}")
-                return f"{base_url}{encoded_address}"
-                
     except Exception as e:
-        logger.error(f"Ошибка при проверке 2GIS для адреса {address}: {str(e)}")
-    
-    return None
+        logger.error(f"Ошибка при проверке адреса {address}: {str(e)}")
+        return None
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
