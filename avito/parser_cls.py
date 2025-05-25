@@ -33,7 +33,7 @@ async def get_commercial_addresses(report_id: int, session: AsyncSession) -> Lis
     """Получение адресов коммерческих клиентов из базы данных"""
     query = select(Client.id, Client.address).where(
         Client.report_id == report_id,
-        Client.is_commercial == True,
+        #Client.is_commercial == True,
         Client.address.isnot(None)
     )
     result = await session.execute(query)
@@ -54,7 +54,6 @@ class AvitoParse:
                  keysword_list: list,
                  keysword_black_list: list,
                  count: int = 5,
-                 tg_token: str = None,
                  max_price: int = 0,
                  min_price: int = 0,
                  geo: str = None,
@@ -73,7 +72,6 @@ class AvitoParse:
         self.keys_black_word = keysword_black_list or None
         self.count = count
         self.data = []
-        self.tg_token = tg_token
         self.title_file = self.__get_file_title()
         self.max_price = int(max_price)
         self.min_price = int(min_price)
@@ -545,8 +543,6 @@ if __name__ == '__main__':
             logger.error("ID отчета должен быть числом")
             sys.exit(1)
 
-    chat_ids = config["Avito"]["CHAT_ID"].split(",")
-    token = config["Avito"]["TG_TOKEN"]
     num_ads = config["Avito"]["NUM_ADS"]
     max_view = config["Avito"].get("MAX_VIEW")
     freq = config["Avito"]["FREQ"]
@@ -565,16 +561,6 @@ if __name__ == '__main__':
         proxy = proxy_change_ip = None
     else:
         logger.info("Используется SOCKS5 прокси с автоматической сменой IP")
-
-    if token and chat_ids:
-        for chat_id in chat_ids:
-            params = {
-                'token': token,
-                'chat_id': chat_id,
-                'parse_mode': 'markdown'
-            }
-            tg_handler = NotificationHandler("telegram", defaults=params)
-            logger.add(tg_handler, level="SUCCESS", format="{message}")
 
     while True:
         try:

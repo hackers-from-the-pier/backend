@@ -67,6 +67,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     }
     
     parsed_data = {}
+
     
     # Обрабатываем основные поля
     for json_field, model_field in field_mapping.items():
@@ -137,9 +138,39 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'frod_avito': None,
         'frod_2gis': generate_2gis_url(parsed_data.get('address'))
     }
+    
     parsed_data.update(additional_fields)
     
+        # Проверяем, является ли клиент коммерческим
+    is_commercial = client_data.get('isCommercial', False)
+    if is_commercial:
+        # Для коммерческих клиентов устанавливаем frod_procentage = 0
+        # и пропускаем дальнейшую обработку
+        parsed_data['is_commercial'] = True
+        parsed_data['frod_procentage'] = 0.0
+        parsed_data['frod_state'] = "Нормальный"
+    
+
+    
     return parsed_data
+
+def get_commercial_addresses(report_id: int) -> List[str]:
+    """
+    Получает список адресов из конкретного отчета
+    
+    Args:
+        report_id: ID отчета
+    
+    Returns:
+        Список адресов из отчета
+    """
+    try:
+        # Получаем все адреса из отчета
+        addresses = db.query(Client.address).filter(Client.report_id == report_id).all()
+        return [addr[0] for addr in addresses if addr[0]]  # Возвращаем только непустые адреса
+    except Exception as e:
+        print(f"Ошибка при получении адресов из отчета {report_id}: {str(e)}")
+        return []
 
 def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
     """
