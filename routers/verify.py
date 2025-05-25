@@ -17,17 +17,19 @@ import os
 router = APIRouter(tags=["Проверки"], prefix="/verify")
 
 # Путь к файлу шрифта
-FONT_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static", "fonts", "DejaVuSans.ttf")
+FONT_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static", "fonts", "DejaVuSans-Regular.ttf")
 
 # Регистрируем шрифт с поддержкой кириллицы
 try:
     pdfmetrics.registerFont(TTFont('DejaVuSans', FONT_FILE_PATH))
+    # Регистрируем тот же файл для жирного начертания
+    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', FONT_FILE_PATH))
     DEFAULT_FONT = 'DejaVuSans'
 except Exception as e:
-    print(f"Ошибка при загрузке шрифта DejaVuSans: {e}")
-    # Если шрифт не найден или ошибка, используем встроенный шрифт (может не поддерживать кириллицу)
+    print(f"Ошибка при загрузке шрифтов DejaVuSans: {e}")
+    # Если шрифты не найдены или ошибка, используем встроенный шрифт (может не поддерживать кириллицу)
     DEFAULT_FONT = 'Helvetica'
-    pdfmetrics.registerFont(TTFont(DEFAULT_FONT, DEFAULT_FONT))
+    # Для встроенных шрифтов не нужна регистрация TTFont, они уже есть
 
 @router.get("/suspicious-clients-pdf")
 async def get_suspicious_clients_pdf(
@@ -106,8 +108,8 @@ async def get_suspicious_clients_pdf(
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'), # Выравнивание по левому краю для данных
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'), # Выравнивание заголовков по центру
-            ('FONTNAME', (0, 0), (-1, -1), DEFAULT_FONT),
-            ('FONTNAME', (0, 0), (-1, 0), f'{DEFAULT_FONT}-Bold'), # Жирный шрифт для заголовков
+            ('FONTNAME', (0, 0), (-1, -1), DEFAULT_FONT), # Используем основной шрифт для всех ячеек
+            ('FONTNAME', (0, 0), (-1, 0), f'{DEFAULT_FONT}-Bold'), # Явно указываем жирный шрифт для заголовков
             ('FONTSIZE', (0, 0), (-1, 0), 14),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
