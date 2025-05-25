@@ -14,10 +14,15 @@ from data_cleaning.parse_report import process_report
 import asyncio
 import sys
 import subprocess
+import logging
 
 from utils.auth import get_current_user
 from utils.models import Client, Report, File, User
 from utils.database import get_async_session
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Конфигурация путей
 UPLOAD_DIR = "/var/www/kilowatt/public/file"
@@ -186,6 +191,7 @@ async def start_check(
 
     async def process_files():
         try:
+            logger.info(f"Начало обработки файлов для отчета {report_id}")
             total_clients = 0
             total_consumption = 0
             commercial_clients = 0
@@ -203,18 +209,23 @@ async def start_check(
                     # Получаем путь к файлу из URL
                     filename = file.s3_url.split('/')[-1]
                     file_path = os.path.join(UPLOAD_DIR, filename)
+                    logger.info(f"Подготовка к обработке файла: {filename}")
                     
                     # Проверяем существование файла
                     if not os.path.exists(file_path):
+                        logger.error(f"Файл не найден: {file_path}")
                         failed_files += 1
                         continue
                     
                     # Создаем задачу для обработки файла
                     async def process_single_file(file_path, file_id):
                         try:
+                            logger.info(f"Начало обработки файла: {file_path}")
                             # Запускаем process_report в отдельном потоке
                             loop = asyncio.get_event_loop()
+                            logger.info(f"Запуск process_report для файла: {file_path}")
                             clients = await loop.run_in_executor(None, process_report, file_path, report_id)
+                            logger.info(f"Файл обработан, получено клиентов: {len(clients)}")
                             
                             # Обновляем статистику
                             nonlocal total_clients, total_consumption, commercial_clients, residential_clients, total_area, processed_files
@@ -235,6 +246,7 @@ async def start_check(
                                 if hasattr(client, 'consumption'):
                                     total_consumption += client.consumption or 0
                             
+                            logger.info(f"Сохранение клиентов в базу данных для файла: {file_path}")
                             # Сохраняем клиентов в базу данных
                             for client in clients:
                                 updated_client = await update_or_create_client(client, db)
@@ -242,8 +254,10 @@ async def start_check(
                             
                             # Отмечаем файл как обработанный
                             file.is_parsed = True
+                            logger.info(f"Файл успешно обработан: {file_path}")
                             return True
                         except Exception as e:
+                            logger.error(f"Ошибка при обработке файла {file_path}: {str(e)}")
                             nonlocal failed_files
                             failed_files += 1
                             return False
@@ -252,15 +266,20 @@ async def start_check(
             
             # Запускаем все задачи параллельно
             if tasks:
+                logger.info(f"Запуск параллельной обработки {len(tasks)} файлов")
                 await asyncio.gather(*tasks)
+                logger.info("Параллельная обработка завершена")
             
             # Обновляем статус отчета
+            logger.info("Обновление статуса отчета")
             report = await db.get(Report, report_id)
             if report:
                 report.is_ready = True
                 report.all_count = total_clients
                 await db.commit()
+                logger.info("Статус отчета обновлен")
             
+            logger.info(f"Обработка завершена. Статистика: обработано файлов: {processed_files}, ошибок: {failed_files}")
             return {
                 "status": "success",
                 "statistics": {
@@ -275,6 +294,7 @@ async def start_check(
             }
             
         except Exception as e:
+            logger.error(f"Критическая ошибка при обработке отчета {report_id}: {str(e)}")
             # Обновляем статус отчета в случае ошибки
             report = await db.get(Report, report_id)
             if report:
@@ -294,7 +314,9 @@ async def start_check(
                 }
             }
 
+    logger.info(f"Запуск обработки отчета {report_id}")
     result = await process_files()
+    logger.info(f"Обработка отчета {report_id} завершена со статусом: {result['status']}")
     
     # Сразу возвращаем ответ
     return {
