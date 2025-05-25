@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from utils.auth import verify_password, access_security
 from utils.database import get_async_session, AsyncSession
-from utils.models import User
+from utils.models import Client
 import pydantic
 from sqlalchemy import select
 from fastapi.responses import StreamingResponse
@@ -22,10 +22,10 @@ async def get_suspicious_clients_pdf(
     На каждой странице размещается информация о 6 клиентах.
     """
     # Формируем запрос для получения подозрительных клиентов
-    query = select(User).where(
-        User.summary_electricity > 3000,
-        User.frod_procentage > 0,
-        User.is_commercial == False
+    query = select(Client).where(
+        Client.summary_electricity > 3000,
+        Client.frod_procentage > 0,
+        Client.is_commercial == False
     )
     
     # Выполняем запрос
@@ -52,10 +52,10 @@ async def get_suspicious_clients_pdf(
         for client in page_clients:
             data.append([
                 str(client.id),
-                client.name,
-                client.email,
-                str(client.summary_electricity),
-                f"{client.frod_procentage}%"
+                client.name or "Нет имени",
+                client.email or "Нет email",
+                str(client.summary_electricity or 0),
+                f"{client.frod_procentage or 0}%"
             ])
         
         # Создаем таблицу
