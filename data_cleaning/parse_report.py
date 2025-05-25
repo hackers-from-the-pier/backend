@@ -376,12 +376,19 @@ def parse_report_file(file_path_or_data: Union[str, List[Dict]]) -> List[Dict[st
         logger.error(f"Ошибка при парсинге данных: {str(e)}", exc_info=True)
         return []
 
-def process_report(file_path: str, report_id: int) -> List[Client]:
+def process_report(file_path_or_data: Union[str, List[Dict]], report_id: int) -> List[Client]:
     """
     Обрабатывает отчёт и создает объекты Client
+    
+    Args:
+        file_path_or_data: Путь к файлу или список данных
+        report_id: ID отчета
+    
+    Returns:
+        List[Client]: Список объектов Client
     """
-    logger.info(f"Начало обработки отчета {report_id} из файла {file_path}")
-    clients_data = parse_report_file(file_path)
+    logger.info(f"Начало обработки отчета {report_id}")
+    clients_data = parse_report_file(file_path_or_data)
     logger.info(f"Создание объектов Client для отчета {report_id}")
     clients = [
         Client(
