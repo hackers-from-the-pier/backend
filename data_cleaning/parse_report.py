@@ -11,10 +11,14 @@ import logging
 from urllib.parse import quote
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
+import tempfile
+import os
+import uuid
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -56,15 +60,34 @@ def setup_selenium_driver():
     """
     Настраивает и возвращает драйвер Selenium
     """
+    # Создаем уникальную временную директорию для профиля Chrome
+    temp_dir = os.path.join(tempfile.gettempdir(), f'chrome_profile_{uuid.uuid4()}')
+    os.makedirs(temp_dir, exist_ok=True)
+    
     chrome_options = Options()
-    chrome_options.add_argument('--headless')  # Запуск в фоновом режиме
+    chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    chrome_options.add_argument(f'--user-data-dir={temp_dir}')
+    chrome_options.add_argument('--disable-extensions')
+    chrome_options.add_argument('--disable-software-rasterizer')
+    chrome_options.add_argument('--disable-features=VizDisplayCompositor')
     
-    return webdriver.Chrome(options=chrome_options)
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+        return driver
+    except Exception as e:
+        logger.error(f"Ошибка при создании драйвера: {str(e)}")
+        # Пытаемся очистить временную директорию
+        try:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except:
+            pass
+        raise
 
 def generate_2gis_url(address: str) -> str:
     """
@@ -79,6 +102,7 @@ def generate_2gis_url(address: str) -> str:
     encoded_address = quote(address)
     url = f"https://2gis.ru/novorossiysk/search/{encoded_address}"
     
+    driver = None
     try:
         driver = setup_selenium_driver()
         logger.info(f"Отправка запроса к 2GIS для адреса: {address}")
@@ -115,12 +139,16 @@ def generate_2gis_url(address: str) -> str:
         except WebDriverException as e:
             logger.error(f"Ошибка Selenium: {str(e)}")
             return None
-        finally:
-            driver.quit()
             
     except Exception as e:
         logger.error(f"Ошибка при проверке адреса {address}: {str(e)}")
         return None
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
