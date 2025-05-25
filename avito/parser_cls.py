@@ -566,38 +566,37 @@ if __name__ == '__main__':
     else:
         logger.info("Используется SOCKS5 прокси с автоматической сменой IP")
 
-    while True:
-        try:
-            parser = AvitoParse(
-                url=url,
-                count=int(num_ads),
-                keysword_list=keys if keys not in ([''], None) else None,
-                keysword_black_list=keys_black if keys_black not in ([''], None) else None,
-                max_price=int(max_price),
-                min_price=int(min_price),
-                geo=geo,
-                need_more_info=1 if need_more_info else 0,
-                proxy=proxy,
-                proxy_change_url=proxy_change_ip,
-                max_views=int(max_view) if max_view else None,
-                fast_speed=1 if fast_speed else 0,
-                report_id=report_id
-            )
+    try:
+        parser = AvitoParse(
+            url=url,
+            count=int(num_ads),
+            keysword_list=keys if keys not in ([''], None) else None,
+            keysword_black_list=keys_black if keys_black not in ([''], None) else None,
+            max_price=int(max_price),
+            min_price=int(min_price),
+            geo=geo,
+            need_more_info=1 if need_more_info else 0,
+            proxy=proxy,
+            proxy_change_url=proxy_change_url,
+            max_views=int(max_view) if max_view else None,
+            fast_speed=1 if fast_speed else 0,
+            report_id=report_id
+        )
+        
+        # Загружаем адреса из БД
+        asyncio.run(parser.load_addresses_from_db())
+        
+        if not parser.addresses:
+            logger.error("Не найдены адреса для обработки")
+            sys.exit(1)
             
-            # Загружаем адреса из БД
-            asyncio.run(parser.load_addresses_from_db())
-            
-            if not parser.addresses:
-                logger.error("Не найдены адреса для обработки")
-                sys.exit(1)
-                
-            parser.parse()
-            logger.info("Пауза")
-            time.sleep(int(freq))
-        except Exception as error:
-            logger.debug(error)
-            logger.debug('Произошла ошибка, но работа будет продолжена через 30 сек. '
-                         'Если ошибка повторится несколько раз - перезапустите скрипт.'
-                         'Если и это не поможет - значит что-то сломалось')
-            time.sleep(30)
+        parser.parse()
+        logger.info("Пауза")
+        time.sleep(int(freq))
+    except Exception as error:
+        logger.debug(error)
+        logger.debug('Произошла ошибка, но работа будет продолжена через 30 сек. '
+                     'Если ошибка повторится несколько раз - перезапустите скрипт.'
+                     'Если и это не поможет - значит что-то сломалось')
+        time.sleep(30)
 
