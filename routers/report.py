@@ -194,49 +194,65 @@ async def start_check(
             processed_files = 0
             failed_files = 0
             
+            # Создаем список задач для асинхронной обработки
+            tasks = []
+            
             # Обрабатываем каждый файл
             for file in files:
                 if not file.is_parsed:
-                    try:
-                        # Получаем путь к файлу из URL
-                        filename = file.s3_url.split('/')[-1]
-                        file_path = os.path.join(UPLOAD_DIR, filename)
-                        
-                        # Проверяем существование файла
-                        if not os.path.exists(file_path):
-                            failed_files += 1
-                            continue
-                        
-                        # Обрабатываем файл
-                        clients = process_report(file_path, report_id)
-                        total_clients += len(clients)
-                        processed_files += 1
-                        
-                        # Собираем статистику
-                        for client in clients:
-                            if hasattr(client, 'is_commercial'):
-                                if client.is_commercial:
-                                    commercial_clients += 1
-                                else:
-                                    residential_clients += 1
-                            
-                            if hasattr(client, 'home_area'):
-                                total_area += client.home_area or 0
-                            
-                            # Предполагаем, что у клиента есть поле consumption
-                            if hasattr(client, 'consumption'):
-                                total_consumption += client.consumption or 0
-                        
-                        # Сохраняем клиентов в базу данных
-                        for client in clients:
-                            updated_client = await update_or_create_client(client, db)
-                            db.add(updated_client)
-                        
-                        # Отмечаем файл как обработанный
-                        file.is_parsed = True
-                    except Exception as e:
+                    # Получаем путь к файлу из URL
+                    filename = file.s3_url.split('/')[-1]
+                    file_path = os.path.join(UPLOAD_DIR, filename)
+                    
+                    # Проверяем существование файла
+                    if not os.path.exists(file_path):
                         failed_files += 1
                         continue
+                    
+                    # Создаем задачу для обработки файла
+                    async def process_single_file(file_path, file_id):
+                        try:
+                            # Запускаем process_report в отдельном потоке
+                            loop = asyncio.get_event_loop()
+                            clients = await loop.run_in_executor(None, process_report, file_path, report_id)
+                            
+                            # Обновляем статистику
+                            nonlocal total_clients, total_consumption, commercial_clients, residential_clients, total_area, processed_files
+                            total_clients += len(clients)
+                            processed_files += 1
+                            
+                            # Собираем статистику
+                            for client in clients:
+                                if hasattr(client, 'is_commercial'):
+                                    if client.is_commercial:
+                                        commercial_clients += 1
+                                    else:
+                                        residential_clients += 1
+                                
+                                if hasattr(client, 'home_area'):
+                                    total_area += client.home_area or 0
+                                
+                                if hasattr(client, 'consumption'):
+                                    total_consumption += client.consumption or 0
+                            
+                            # Сохраняем клиентов в базу данных
+                            for client in clients:
+                                updated_client = await update_or_create_client(client, db)
+                                db.add(updated_client)
+                            
+                            # Отмечаем файл как обработанный
+                            file.is_parsed = True
+                            return True
+                        except Exception as e:
+                            nonlocal failed_files
+                            failed_files += 1
+                            return False
+                    
+                    tasks.append(process_single_file(file_path, file.id))
+            
+            # Запускаем все задачи параллельно
+            if tasks:
+                await asyncio.gather(*tasks)
             
             # Обновляем статус отчета
             report = await db.get(Report, report_id)
@@ -277,9 +293,6 @@ async def start_check(
                     "failed_files": failed_files
                 }
             }
-
-    # Добавляем задачу в фоновые задачи
-    #background_tasks.add_task(process_files)
 
     result = await process_files()
     
