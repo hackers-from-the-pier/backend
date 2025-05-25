@@ -7,6 +7,10 @@ import requests
 from utils.models import Client
 import urllib.parse
 from .fill_missing import fill_missing_by_group
+import logging
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 # Устанавливаем опцию для будущего поведения pandas
 pd.set_option('future.no_silent_downcasting', True)
@@ -47,6 +51,7 @@ def generate_2gis_url(address: str) -> str:
     if not address:
         return None
     
+    logger.info(f"Генерация 2GIS URL для адреса: {address}")
     base_url = "https://2gis.ru/novorossiysk/search/"
     encoded_address = urllib.parse.quote(address)
     
@@ -73,6 +78,7 @@ def generate_2gis_url(address: str) -> str:
     
     # Получаем HTML-код страницы через прокси
     try:
+        logger.info(f"Отправка запроса к 2GIS для адреса: {address}")
         response = requests.get(
             f"{base_url}{encoded_address}",
             headers=headers,
@@ -91,9 +97,11 @@ def generate_2gis_url(address: str) -> str:
         # Проверяем наличие ключевых фраз
         for phrase in hotel_phrases:
             if phrase in html_content:
+                logger.info(f"Найдены признаки гостиничного бизнеса для адреса: {address}")
                 return f"{base_url}{encoded_address}"
                 
-    except Exception as e: pass
+    except Exception as e:
+        logger.error(f"Ошибка при проверке 2GIS для адреса {address}: {str(e)}")
     
     return None
 
@@ -102,6 +110,8 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     Извлекает данные клиента из JSON и преобразует их в формат модели Client
     с обработкой пропущенных значений и конвертацией типов
     """
+    logger.info(f"Начало парсинга данных клиента: {client_data.get('accountId', 'Unknown')}")
+    
     # Маппинг полей из входного JSON в поля модели
     field_mapping = {
         'accountId': 'id',
@@ -114,7 +124,6 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     }
     
     parsed_data = {}
-
     
     # Обрабатываем основные поля
     for json_field, model_field in field_mapping.items():
@@ -146,6 +155,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Расчет метрик потребления электроэнергии
     consumption = client_data.get('consumption', {})
     if consumption:
+        logger.info(f"Расчет метрик потребления для клиента {client_data.get('accountId', 'Unknown')}")
         # Преобразуем значения в числа и фильтруем None
         monthly_values = [float(v) for v in consumption.values() if v is not None]
         
@@ -173,6 +183,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Инициализируем Faker с русской локалью
     fake = Faker('ru_RU')
     
+    logger.info(f"Проверка 2GIS для адреса: {parsed_data.get('address')}")
     z2gis = generate_2gis_url(parsed_data.get('address'))
     
     # Добавляем поля, которых нет во входных данных
@@ -190,15 +201,17 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     
     parsed_data.update(additional_fields)
     
-        # Проверяем, является ли клиент коммерческим
+    # Проверяем, является ли клиент коммерческим
     is_commercial = client_data.get('isCommercial', False)
     if is_commercial:
+        logger.info(f"Клиент {client_data.get('accountId', 'Unknown')} определен как коммерческий")
         # Для коммерческих клиентов устанавливаем frod_procentage = 0
         # и пропускаем дальнейшую обработку
         parsed_data['is_commercial'] = True
         parsed_data['frod_procentage'] = 0.0
         parsed_data['frod_state'] = "Нормальный"
     
+    logger.info(f"Завершение парсинга данных клиента: {client_data.get('accountId', 'Unknown')}")
     return parsed_data
 
 def get_commercial_addresses(report_id: int) -> List[str]:
@@ -223,36 +236,47 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
     """
     Парсит JSON файл отчёта и возвращает список данных клиентов
     """
+    logger.info(f"Начало парсинга файла: {file_path}")
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             report_data = json.load(f)
+            logger.info(f"Файл успешно прочитан, размер данных: {len(str(report_data))} байт")
             
         # Предполагаем, что данные клиентов находятся в списке
         if isinstance(report_data, list):
+            logger.info(f"Данные в формате списка, количество записей: {len(report_data)}")
             clients_data = [parse_client_data(client) for client in report_data]
         # Если данные вложены в объект
         elif isinstance(report_data, dict):
+            logger.info("Данные в формате словаря, поиск списка клиентов")
             # Ищем ключ, содержащий список клиентов
             for key, value in report_data.items():
                 if isinstance(value, list):
+                    logger.info(f"Найден список клиентов в ключе {key}, количество записей: {len(value)}")
                     clients_data = [parse_client_data(client) for client in value]
                     break
         else:
+            logger.warning(f"Неизвестный формат данных в файле: {type(report_data)}")
             clients_data = []
             
         # Преобразуем в DataFrame для заполнения пропусков
+        logger.info("Преобразование данных в DataFrame")
         df = pd.DataFrame(clients_data)
         
         # Извлекаем регион из адреса
+        logger.info("Извлечение регионов из адресов")
         df['region'] = df['address'].apply(lambda x: x.split(',')[0].strip() if pd.notna(x) and ',' in x else 'Unknown')
         
         # Заполняем пропуски медианными значениями для числовых полей
+        logger.info("Заполнение пропущенных значений")
         numeric_columns = ['home_area', 'season_index', 'people_count', 'rooms_count', 'frod_procentage']
         for col in numeric_columns:
             if col in df.columns:
+                logger.info(f"Заполнение пропусков для колонки: {col}")
                 df = fill_missing_by_group(df, col, group_cols=['home_type', 'region'])
         
         # Преобразуем DataFrame обратно в список словарей
+        logger.info("Преобразование DataFrame обратно в список словарей")
         result = []
         for _, row in df.iterrows():
             record = {}
@@ -268,21 +292,26 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
                     record[col] = value
             result.append(record)
         
+        logger.info(f"Парсинг файла завершен, обработано записей: {len(result)}")
         return result
         
     except Exception as e:
-        print(f"Ошибка при парсинге файла {file_path}: {str(e)}")
+        logger.error(f"Ошибка при парсинге файла {file_path}: {str(e)}", exc_info=True)
         return []
 
 def process_report(file_path: str, report_id: int) -> List[Client]:
     """
     Обрабатывает отчёт и создает объекты Client
     """
+    logger.info(f"Начало обработки отчета {report_id} из файла {file_path}")
     clients_data = parse_report_file(file_path)
-    return [
+    logger.info(f"Создание объектов Client для отчета {report_id}")
+    clients = [
         Client(
             **{k: v for k, v in client_data.items() if k != 'region'},
             report_id=report_id
         )
         for client_data in clients_data
-    ] 
+    ]
+    logger.info(f"Обработка отчета {report_id} завершена, создано объектов: {len(clients)}")
+    return clients 

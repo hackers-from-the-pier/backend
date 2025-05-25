@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Конфигурация путей
 UPLOAD_DIR = "/var/www/kilowatt/public/file"
 BASE_URL = "https://true.kilowattt.ru/file"
+PROCESS_TIMEOUT = 300  # 5 минут таймаут по умолчанию
 
 router = APIRouter(prefix="/report", tags=["Отчеты"])
 
@@ -171,11 +172,14 @@ async def start_check(
     report_id: int,
     #background_tasks: BackgroundTasks,
     db: Session = Depends(get_async_session),
+    timeout: Optional[int] = PROCESS_TIMEOUT,
     #current_user: User = Depends(get_current_user)
 ):
     """
     Запустить проверку отчета и парсеры в фоновом режиме
     """
+    logger.info(f"Запуск обработки отчета {report_id} с таймаутом {timeout} секунд")
+    
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
     if not report:
@@ -239,12 +243,12 @@ async def start_check(
                                         file_path, 
                                         report_id
                                     ),
-                                    timeout=30.0  # 30 секунд таймаут
+                                    timeout=timeout
                                 )
                                 logger.info(f"Файл обработан, получено клиентов: {len(clients)}")
                             except asyncio.TimeoutError:
-                                logger.error(f"Таймаут при обработке файла: {file_path}")
-                                raise Exception("Превышено время обработки файла")
+                                logger.error(f"Таймаут при обработке файла: {file_path} (таймаут: {timeout} сек)")
+                                raise Exception(f"Превышено время обработки файла ({timeout} сек)")
                             
                             # Обновляем статистику
                             nonlocal total_clients, total_consumption, commercial_clients, residential_clients, total_area, processed_files
@@ -335,9 +339,7 @@ async def start_check(
                 }
             }
 
-    logger.info(f"Запуск обработки отчета {report_id}")
     result = await process_files()
-    logger.info(f"Обработка отчета {report_id} завершена со статусом: {result['status']}")
     
     # Сразу возвращаем ответ
     return {
