@@ -221,11 +221,30 @@ async def start_check(
                     async def process_single_file(file_path, file_id):
                         try:
                             logger.info(f"Начало обработки файла: {file_path}")
-                            # Запускаем process_report в отдельном потоке
-                            loop = asyncio.get_event_loop()
+                            
+                            # Читаем содержимое файла
+                            logger.info(f"Чтение файла: {file_path}")
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                            logger.info(f"Файл прочитан, размер: {len(file_content)} байт")
+                            
+                            # Запускаем process_report в отдельном потоке с таймаутом
                             logger.info(f"Запуск process_report для файла: {file_path}")
-                            clients = process_report(file_path, report_id) #await loop.run_in_executor(None, process_report, file_path, report_id)
-                            logger.info(f"Файл обработан, получено клиентов: {len(clients)}")
+                            try:
+                                # Используем asyncio.wait_for для установки таймаута
+                                clients = await asyncio.wait_for(
+                                    asyncio.get_event_loop().run_in_executor(
+                                        None, 
+                                        process_report, 
+                                        file_path, 
+                                        report_id
+                                    ),
+                                    timeout=30.0  # 30 секунд таймаут
+                                )
+                                logger.info(f"Файл обработан, получено клиентов: {len(clients)}")
+                            except asyncio.TimeoutError:
+                                logger.error(f"Таймаут при обработке файла: {file_path}")
+                                raise Exception("Превышено время обработки файла")
                             
                             # Обновляем статистику
                             nonlocal total_clients, total_consumption, commercial_clients, residential_clients, total_area, processed_files
@@ -233,6 +252,7 @@ async def start_check(
                             processed_files += 1
                             
                             # Собираем статистику
+                            logger.info(f"Начало сбора статистики для файла: {file_path}")
                             for client in clients:
                                 if hasattr(client, 'is_commercial'):
                                     if client.is_commercial:
@@ -245,6 +265,7 @@ async def start_check(
                                 
                                 if hasattr(client, 'consumption'):
                                     total_consumption += client.consumption or 0
+                            logger.info(f"Статистика собрана для файла: {file_path}")
                             
                             logger.info(f"Сохранение клиентов в базу данных для файла: {file_path}")
                             # Сохраняем клиентов в базу данных
@@ -257,7 +278,7 @@ async def start_check(
                             logger.info(f"Файл успешно обработан: {file_path}")
                             return True
                         except Exception as e:
-                            logger.error(f"Ошибка при обработке файла {file_path}: {str(e)}")
+                            logger.error(f"Ошибка при обработке файла {file_path}: {str(e)}", exc_info=True)
                             nonlocal failed_files
                             failed_files += 1
                             return False
