@@ -192,7 +192,8 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'buildingType': 'home_type',
         'roomsCount': 'rooms_count',
         'residentsCount': 'people_count',
-        'totalArea': 'home_area'
+        'totalArea': 'home_area',
+        'consumption': 'consumption'  # Добавляем поле consumption
     }
     
     parsed_data = {}
