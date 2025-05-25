@@ -10,6 +10,7 @@ from routers.user import router as user_router
 from routers.auth import router as auth_router
 from routers.client import router as client_router
 from routers.report import router as report_router
+from routers.verify import router as verify_router
 
 from utils.config import API_HOST, API_PORT, API_VERSION, API_RELOAD
 
@@ -40,6 +41,7 @@ app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(client_router)
 app.include_router(report_router)
+app.include_router(verify_router)
 
 if __name__ == "__main__":
     uvicorn.run(app="main:app",
