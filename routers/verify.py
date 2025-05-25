@@ -81,13 +81,13 @@ async def get_suspicious_clients_pdf(
         page_clients = suspicious_clients[i:i+6]
         
         # Создаем таблицу для текущей страницы
-        data = [['ID', 'Имя', 'Email', 'Потребление (кВт⋅ч)', 'Процент фрода']]
+        data = [['ID', 'Имя', 'Email', 'Среднее потребление в месяц (кВт⋅ч)', 'Процент фрода']]
         for client in page_clients:
             data.append([
                 str(client.id),
                 client.name or "Нет имени",
                 client.email or "Нет email",
-                str(client.summary_electricity or 0),
+                str(client.avg_monthly_electricity or 0),
                 f"{client.frod_procentage or 0}%"
             ])
         
@@ -96,10 +96,10 @@ async def get_suspicious_clients_pdf(
         available_width = landscape(A4)[0] - doc.leftMargin - doc.rightMargin
         col_widths = [
             available_width * 0.08, # ID (8%)
-            available_width * 0.18, # Имя (18%)
-            available_width * 0.38, # Email (38%)
-            available_width * 0.15, # Потребление (15%)
-            available_width * 0.15  # Процент фрода (15%)
+            available_width * 0.22, # Имя (22%)
+            available_width * 0.42, # Email (42%)
+            available_width * 0.12, # Потребление (12%)
+            available_width * 0.16  # Процент фрода (16%)
         ]
 
         table = Table(data, colWidths=col_widths)

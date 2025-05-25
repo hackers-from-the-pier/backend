@@ -32,3 +32,11 @@ FTP_HOST = os.getenv('FTP_HOST', 'ftp.ru1.storage.beget.cloud')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
 FTP_BASE_URL = os.getenv('FTP_BASE_URL', 'https://ru1.storage.beget.cloud')
+
+# pochta
+SMTP_USER = "info@kilowattt.ru"
+SMTP_PASSWORD = "8oXBi2i297R*"
+
+# Account Type – IMAP
+# Incoming – imap.beget.com
+# Outgoing – smtp.beget.com

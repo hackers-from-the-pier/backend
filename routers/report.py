@@ -186,6 +186,11 @@ async def start_check(
     
     try:
         total_clients = 0
+        total_consumption = 0
+        commercial_clients = 0
+        residential_clients = 0
+        total_area = 0
+        
         # Обрабатываем каждый файл
         for file in files:
             if not file.is_parsed:
@@ -200,6 +205,21 @@ async def start_check(
                 # Обрабатываем файл
                 clients = process_report(file_path, report_id)
                 total_clients += len(clients)
+                
+                # Собираем статистику
+                for client in clients:
+                    if hasattr(client, 'is_commercial'):
+                        if client.is_commercial:
+                            commercial_clients += 1
+                        else:
+                            residential_clients += 1
+                    
+                    if hasattr(client, 'home_area'):
+                        total_area += client.home_area or 0
+                    
+                    # Предполагаем, что у клиента есть поле consumption
+                    if hasattr(client, 'consumption'):
+                        total_consumption += client.consumption or 0
                 
                 # Сохраняем клиентов в базу данных
                 for client in clients:
@@ -223,7 +243,15 @@ async def start_check(
             "message": "Проверка завершена, парсер Авито запущен в отдельном процессе",
             "processed_files": len(files),
             "clients_count": total_clients,
-            "parser_process_id": process.pid
+            "parser_process_id": process.pid,
+            "statistics": {
+                "total_consumption": total_consumption,
+                "commercial_clients": commercial_clients,
+                "residential_clients": residential_clients,
+                "total_area": total_area,
+                "average_consumption_per_client": total_consumption / total_clients if total_clients > 0 else 0,
+                "average_area_per_client": total_area / total_clients if total_clients > 0 else 0
+            }
         }
         
     except Exception as e:

@@ -50,6 +50,12 @@ def generate_2gis_url(address: str) -> str:
     base_url = "https://2gis.ru/novorossiysk/search/"
     encoded_address = urllib.parse.quote(address)
     
+    # Настройка прокси SOCKS5
+    proxies = {
+        'http': 'socks5://aDyT3A:hYa5AKdAtruM@gproxy.site:10693',
+        'https': 'socks5://aDyT3A:hYa5AKdAtruM@gproxy.site:10693'
+    }
+    
     # Заголовки для имитации реального браузера
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -65,11 +71,12 @@ def generate_2gis_url(address: str) -> str:
         'Cache-Control': 'max-age=0'
     }
     
-    # Получаем HTML-код страницы
+    # Получаем HTML-код страницы через прокси
     try:
         response = requests.get(
             f"{base_url}{encoded_address}",
             headers=headers,
+            proxies=proxies,
             timeout=10
         )
         html_content = response.text.lower()
