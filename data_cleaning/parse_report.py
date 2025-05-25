@@ -9,6 +9,12 @@ import urllib.parse
 from .fill_missing import fill_missing_by_group
 import logging
 from urllib.parse import quote
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -46,9 +52,23 @@ def convert_value(value: Any, target_type: type) -> Optional[Any]:
     except (ValueError, TypeError):
         return None
 
+def setup_selenium_driver():
+    """
+    Настраивает и возвращает драйвер Selenium
+    """
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')  # Запуск в фоновом режиме
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    return webdriver.Chrome(options=chrome_options)
+
 def generate_2gis_url(address: str) -> str:
     """
-    Генерирует URL для поиска адреса в 2GIS
+    Генерирует URL для поиска адреса в 2GIS и проверяет его через Selenium
     """
     if not address:
         return None
@@ -60,23 +80,19 @@ def generate_2gis_url(address: str) -> str:
     url = f"https://2gis.ru/novorossiysk/search/{encoded_address}"
     
     try:
+        driver = setup_selenium_driver()
         logger.info(f"Отправка запроса к 2GIS для адреса: {address}")
-        response = requests.get(url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive'
-        })
         
-        logger.info("status code:" + str(response.status_code))
-        
-        # Проверяем статус ответа
-        if response.status_code == 200:
-            # Декодируем контент с правильной кодировкой
-            content = response.content.decode('utf-8')
+        try:
+            driver.get(url)
             
-            logger.info(content)
+            # Ждем загрузки результатов поиска
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "searchResults__list"))
+            )
+            
+            # Получаем текст страницы
+            page_text = driver.page_source.lower()
             
             # Проверяем наличие ключевых фраз
             hotel_phrases = [
@@ -85,13 +101,23 @@ def generate_2gis_url(address: str) -> str:
                 'почасовая', 'посуточная', 'мини-отель'
             ]
             
-            content_lower = content.lower()
             for phrase in hotel_phrases:
-                if phrase in content_lower:
+                if phrase in page_text:
+                    logger.info(f"Найдено совпадение с фразой: {phrase}")
                     return url
                     
-        return None
-        
+            logger.info("Совпадений не найдено")
+            return None
+            
+        except TimeoutException:
+            logger.error("Таймаут при загрузке страницы")
+            return None
+        except WebDriverException as e:
+            logger.error(f"Ошибка Selenium: {str(e)}")
+            return None
+        finally:
+            driver.quit()
+            
     except Exception as e:
         logger.error(f"Ошибка при проверке адреса {address}: {str(e)}")
         return None
