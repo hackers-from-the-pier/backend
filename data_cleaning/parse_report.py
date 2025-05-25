@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from faker import Faker
 import pandas as pd
 import numpy as np
+import requests
 from utils.models import Client
 import urllib.parse
 from .fill_missing import fill_missing_by_group
@@ -41,14 +42,53 @@ def convert_value(value: Any, target_type: type) -> Optional[Any]:
 
 def generate_2gis_url(address: str) -> str:
     """
-    Генерирует URL для поиска адреса в 2GIS
+    Генерирует URL для поиска адреса в 2GIS и проверяет наличие признаков гостиничного бизнеса
     """
     if not address:
         return None
     
     base_url = "https://2gis.ru/novorossiysk/search/"
     encoded_address = urllib.parse.quote(address)
-    return f"{base_url}{encoded_address}"
+    
+    # Заголовки для имитации реального браузера
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0'
+    }
+    
+    # Получаем HTML-код страницы
+    try:
+        response = requests.get(
+            f"{base_url}{encoded_address}",
+            headers=headers,
+            timeout=10
+        )
+        html_content = response.text.lower()
+        
+        # Список ключевых фраз для проверки
+        hotel_phrases = [
+            'гостиница', 'отель', 'хостел', 'апартаменты',
+            'сдается', 'аренда', 'проживание', 'номер',
+            'почасовая', 'посуточная', 'мини-отель'
+        ]
+        
+        # Проверяем наличие ключевых фраз
+        for phrase in hotel_phrases:
+            if phrase in html_content:
+                return f"{base_url}{encoded_address}"
+                
+    except Exception as e: pass
+    
+    return None
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -126,6 +166,8 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Инициализируем Faker с русской локалью
     fake = Faker('ru_RU')
     
+    z2gis = generate_2gis_url(parsed_data.get('address'))
+    
     # Добавляем поля, которых нет во входных данных
     additional_fields = {
         'name': fake.name(),  # Генерируем ФИО
@@ -133,10 +175,10 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'phone': fake.phone_number(),  # Генерируем телефон
         'season_index': None,
         'frod_state': "Оценивается",
-        'frod_procentage': None,
+        'frod_procentage': 30 if z2gis else 0,
         'frod_yandex': None,
         'frod_avito': None,
-        'frod_2gis': generate_2gis_url(parsed_data.get('address'))
+        'frod_2gis': z2gis
     }
     
     parsed_data.update(additional_fields)
@@ -149,8 +191,6 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         parsed_data['is_commercial'] = True
         parsed_data['frod_procentage'] = 0.0
         parsed_data['frod_state'] = "Нормальный"
-    
-
     
     return parsed_data
 

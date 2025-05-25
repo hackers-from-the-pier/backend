@@ -90,7 +90,7 @@ class AvitoParse:
         self.xlsx_handler = XLSXHandler(self.title_file)
         self.fast_speed = fast_speed
         self.report_id = report_id
-        self.addresses = []
+        self.addresses = []  # Инициализируем пустой список адресов
         self.current_address_index = 0
         self.current_client_id = None
         self.last_ip_change = 0  # Время последней смены IP
