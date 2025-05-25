@@ -1,0 +1,15 @@
+[Unit]
+Description=True Kilowatt API Service
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/home/backend
+Environment="PATH=/home/backend/venv/bin"
+ExecStart=/home/backend/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 
