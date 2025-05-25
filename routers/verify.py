@@ -95,11 +95,11 @@ async def get_suspicious_clients_pdf(
         # Скорректированы ширины для лучшего размещения
         available_width = landscape(A4)[0] - doc.leftMargin - doc.rightMargin
         col_widths = [
-            available_width * 0.08, # ID
-            available_width * 0.15, # Имя
-            available_width * 0.35, # Email
-            available_width * 0.20, # Потребление
-            available_width * 0.15  # Процент фрода
+            available_width * 0.08, # ID (8%)
+            available_width * 0.18, # Имя (18%)
+            available_width * 0.38, # Email (38%)
+            available_width * 0.15, # Потребление (15%)
+            available_width * 0.15  # Процент фрода (15%)
         ]
 
         table = Table(data, colWidths=col_widths)
@@ -109,14 +109,14 @@ async def get_suspicious_clients_pdf(
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'), # Выравнивание по левому краю для данных
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'), # Выравнивание заголовков по центру
             ('FONTNAME', (0, 0), (-1, -1), DEFAULT_FONT), # Используем основной шрифт для всех ячеек
-            ('FONTNAME', (0, 0), (-1, 0), f'{DEFAULT_FONT}-Bold'), # Явно указываем жирный шрифт для заголовков
+            ('FONTNAME', (0, 0), (-1, 0), f'{DEFAULT_FONT}-Bold'), # Используем жирный шрифт для заголовков
             ('FONTSIZE', (0, 0), (-1, 0), 14),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
             ('FONTSIZE', (0, 1), (-1, -1), 12),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'), # Вертикальное выравнивание по верхнему краю
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
