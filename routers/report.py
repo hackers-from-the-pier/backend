@@ -164,7 +164,7 @@ async def update_or_create_client(client: Client, db: AsyncSession) -> Client:
 @router.post("/{report_id}/check")
 async def start_check(
     report_id: int,
-    background_tasks: BackgroundTasks,
+    #background_tasks: BackgroundTasks,
     db: Session = Depends(get_async_session),
     #current_user: User = Depends(get_current_user)
 ):
@@ -184,83 +184,112 @@ async def start_check(
     if not files:
         raise HTTPException(status_code=404, detail="Файлы отчета не найдены")
 
-    # Запускаем обработку в фоновом режиме
-    background_tasks.add_task(process_report_background, report_id, files, db)
+    async def process_files():
+        try:
+            total_clients = 0
+            total_consumption = 0
+            commercial_clients = 0
+            residential_clients = 0
+            total_area = 0
+            processed_files = 0
+            failed_files = 0
+            
+            # Обрабатываем каждый файл
+            for file in files:
+                if not file.is_parsed:
+                    try:
+                        # Получаем путь к файлу из URL
+                        filename = file.s3_url.split('/')[-1]
+                        file_path = os.path.join(UPLOAD_DIR, filename)
+                        
+                        # Проверяем существование файла
+                        if not os.path.exists(file_path):
+                            failed_files += 1
+                            continue
+                        
+                        # Обрабатываем файл
+                        clients = process_report(file_path, report_id)
+                        total_clients += len(clients)
+                        processed_files += 1
+                        
+                        # Собираем статистику
+                        for client in clients:
+                            if hasattr(client, 'is_commercial'):
+                                if client.is_commercial:
+                                    commercial_clients += 1
+                                else:
+                                    residential_clients += 1
+                            
+                            if hasattr(client, 'home_area'):
+                                total_area += client.home_area or 0
+                            
+                            # Предполагаем, что у клиента есть поле consumption
+                            if hasattr(client, 'consumption'):
+                                total_consumption += client.consumption or 0
+                        
+                        # Сохраняем клиентов в базу данных
+                        for client in clients:
+                            updated_client = await update_or_create_client(client, db)
+                            db.add(updated_client)
+                        
+                        # Отмечаем файл как обработанный
+                        file.is_parsed = True
+                    except Exception as e:
+                        failed_files += 1
+                        continue
+            
+            # Обновляем статус отчета
+            report = await db.get(Report, report_id)
+            if report:
+                report.is_ready = True
+                report.all_count = total_clients
+                await db.commit()
+            
+            return {
+                "status": "success",
+                "statistics": {
+                    "total_clients": total_clients,
+                    "total_consumption": total_consumption,
+                    "commercial_clients": commercial_clients,
+                    "residential_clients": residential_clients,
+                    "total_area": total_area,
+                    "processed_files": processed_files,
+                    "failed_files": failed_files
+                }
+            }
+            
+        except Exception as e:
+            # Обновляем статус отчета в случае ошибки
+            report = await db.get(Report, report_id)
+            if report:
+                report.is_ready = False
+                await db.commit()
+            return {
+                "status": "error",
+                "error": str(e),
+                "statistics": {
+                    "total_clients": total_clients,
+                    "total_consumption": total_consumption,
+                    "commercial_clients": commercial_clients,
+                    "residential_clients": residential_clients,
+                    "total_area": total_area,
+                    "processed_files": processed_files,
+                    "failed_files": failed_files
+                }
+            }
+
+    # Добавляем задачу в фоновые задачи
+    #background_tasks.add_task(process_files)
+
+    result = await process_files()
     
     # Сразу возвращаем ответ
     return {
-        "message": "Проверка запущена в фоновом режиме",
+        "message": "Проверка завершена",
         "report_id": report_id,
-        "status": "processing"
+        "status": result["status"],
+        "statistics": result["statistics"]
     }
-
-async def process_report_background(report_id: int, files: List[File], db: AsyncSession):
-    """
-    Фоновая обработка отчета
-    """
-    try:
-        total_clients = 0
-        total_consumption = 0
-        commercial_clients = 0
-        residential_clients = 0
-        total_area = 0
-        
-        # Обрабатываем каждый файл
-        for file in files:
-            if not file.is_parsed:
-                # Получаем путь к файлу из URL
-                filename = file.s3_url.split('/')[-1]
-                file_path = os.path.join(UPLOAD_DIR, filename)
-                
-                # Проверяем существование файла
-                if not os.path.exists(file_path):
-                    continue
-                
-                # Обрабатываем файл
-                clients = process_report(file_path, report_id)
-                total_clients += len(clients)
-                
-                # Собираем статистику
-                for client in clients:
-                    if hasattr(client, 'is_commercial'):
-                        if client.is_commercial:
-                            commercial_clients += 1
-                        else:
-                            residential_clients += 1
-                    
-                    if hasattr(client, 'home_area'):
-                        total_area += client.home_area or 0
-                    
-                    # Предполагаем, что у клиента есть поле consumption
-                    if hasattr(client, 'consumption'):
-                        total_consumption += client.consumption or 0
-                
-                # Сохраняем клиентов в базу данных
-                for client in clients:
-                    updated_client = await update_or_create_client(client, db)
-                    db.add(updated_client)
-                
-                # Отмечаем файл как обработанный
-                file.is_parsed = True
-        
-        # Обновляем статус отчета
-        report = await db.get(Report, report_id)
-        if report:
-            report.is_ready = True
-            report.all_count = total_clients
-            await db.commit()
-        
-        # Запускаем парсеры в отдельном процессе
-        script_path = os.path.join(os.path.dirname(__file__), "..", "avito", "parser_cls.py")
-        subprocess.Popen([sys.executable, script_path, str(report_id)])
-        
-    except Exception as e:
-        #logger.error(f"Ошибка при фоновой обработке отчета {report_id}: {str(e)}")
-        # Обновляем статус отчета в случае ошибки
-        report = await db.get(Report, report_id)
-        if report:
-            report.is_ready = False
-            await db.commit()
 
 @router.get("/list", response_model=List[ReportResponse])
 async def get_all_reports(
