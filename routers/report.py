@@ -169,7 +169,7 @@ async def start_check(
     #current_user: User = Depends(get_current_user)
 ):
     """
-    Запустить проверку отчета и парсер Авито в отдельном процессе
+    Запустить проверку отчета и парсеры в фоновом режиме
     """
     # Проверяем существование отчета
     report = await db.get(Report, report_id)
@@ -183,7 +183,21 @@ async def start_check(
     
     if not files:
         raise HTTPException(status_code=404, detail="Файлы отчета не найдены")
+
+    # Запускаем обработку в фоновом режиме
+    background_tasks.add_task(process_report_background, report_id, files, db)
     
+    # Сразу возвращаем ответ
+    return {
+        "message": "Проверка запущена в фоновом режиме",
+        "report_id": report_id,
+        "status": "processing"
+    }
+
+async def process_report_background(report_id: int, files: List[File], db: AsyncSession):
+    """
+    Фоновая обработка отчета
+    """
     try:
         total_clients = 0
         total_consumption = 0
@@ -230,33 +244,23 @@ async def start_check(
                 file.is_parsed = True
         
         # Обновляем статус отчета
-        report.is_ready = True
-        report.all_count = total_clients
+        report = await db.get(Report, report_id)
+        if report:
+            report.is_ready = True
+            report.all_count = total_clients
+            await db.commit()
         
-        await db.commit()
-        
-        # Запускаем парсер Авито в отдельном процессе
+        # Запускаем парсеры в отдельном процессе
         script_path = os.path.join(os.path.dirname(__file__), "..", "avito", "parser_cls.py")
-        process = subprocess.Popen([sys.executable, script_path, str(report_id)])
-        
-        return {
-            "message": "Проверка завершена, парсер Авито запущен в отдельном процессе",
-            "processed_files": len(files),
-            "clients_count": total_clients,
-            "parser_process_id": process.pid,
-            "statistics": {
-                "total_consumption": total_consumption,
-                "commercial_clients": commercial_clients,
-                "residential_clients": residential_clients,
-                "total_area": total_area,
-                "average_consumption_per_client": total_consumption / total_clients if total_clients > 0 else 0,
-                "average_area_per_client": total_area / total_clients if total_clients > 0 else 0
-            }
-        }
+        subprocess.Popen([sys.executable, script_path, str(report_id)])
         
     except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ошибка при обработке отчета: {str(e)}")
+        #logger.error(f"Ошибка при фоновой обработке отчета {report_id}: {str(e)}")
+        # Обновляем статус отчета в случае ошибки
+        report = await db.get(Report, report_id)
+        if report:
+            report.is_ready = False
+            await db.commit()
 
 @router.get("/list", response_model=List[ReportResponse])
 async def get_all_reports(

@@ -533,6 +533,8 @@ class TwoGisParser:
         self.stop_event = stop_event or threading.Event()
         self.last_ip_change = 0
         self.ip_change_interval = 300
+        self.max_retries = 3  # Максимальное количество попыток
+        self.request_timeout = 30  # Увеличенный таймаут для запросов
 
     @property
     def use_proxy(self) -> bool:
@@ -605,37 +607,52 @@ class TwoGisParser:
             'Cache-Control': 'max-age=0'
         }
         
-        try:
-            async with session.get(
-                f"{base_url}{encoded_address}",
-                headers=headers,
-                proxy=proxy,
-                timeout=10
-            ) as response:
-                if response.status == 403:
-                    if self.use_proxy:
-                        self.change_ip()
-                    return None
-                    
-                html_content = await response.text()
-                html_content = html_content.lower()
-                
-                # Список ключевых фраз для проверки
-                hotel_phrases = [
-                    'гостиница', 'отель', 'хостел', 'апартаменты',
-                    'сдается', 'аренда', 'проживание', 'номер',
-                    'почасовая', 'посуточная', 'мини-отель'
-                ]
-                
-                # Проверяем наличие ключевых фраз
-                for phrase in hotel_phrases:
-                    if phrase in html_content:
-                        return f"{base_url}{encoded_address}"
+        for attempt in range(self.max_retries):
+            try:
+                async with session.get(
+                    f"{base_url}{encoded_address}",
+                    headers=headers,
+                    proxy=proxy,
+                    timeout=self.request_timeout
+                ) as response:
+                    if response.status == 403:
+                        if self.use_proxy:
+                            self.change_ip()
+                        return None
+                    elif response.status == 504:
+                        logger.warning(f"Gateway Timeout при обработке адреса {address}. Попытка {attempt + 1}/{self.max_retries}")
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(5 * (attempt + 1))  # Увеличиваем задержку с каждой попыткой
+                            continue
+                        return None
                         
-        except Exception as e:
-            logger.error(f"Ошибка при обработке адреса {address}: {str(e)}")
-            if self.use_proxy:
-                self.change_ip()
+                    html_content = await response.text()
+                    html_content = html_content.lower()
+                    
+                    # Список ключевых фраз для проверки
+                    hotel_phrases = [
+                        'гостиница', 'отель', 'хостел', 'апартаменты',
+                        'сдается', 'аренда', 'проживание', 'номер',
+                        'почасовая', 'посуточная', 'мини-отель'
+                    ]
+                    
+                    # Проверяем наличие ключевых фраз
+                    for phrase in hotel_phrases:
+                        if phrase in html_content:
+                            return f"{base_url}{encoded_address}"
+                            
+            except asyncio.TimeoutError:
+                logger.warning(f"Таймаут при обработке адреса {address}. Попытка {attempt + 1}/{self.max_retries}")
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+            except Exception as e:
+                logger.error(f"Ошибка при обработке адреса {address}: {str(e)}")
+                if self.use_proxy:
+                    self.change_ip()
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
         
         return None
 
@@ -643,7 +660,8 @@ class TwoGisParser:
         """
         Асинхронная обработка списка адресов
         """
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=300)  # 5 минут на весь процесс
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             tasks = []
             for address_data in addresses:
                 if self.stop_event.is_set():
@@ -652,8 +670,19 @@ class TwoGisParser:
                 if address:
                     tasks.append(self.check_address_async(address, session))
             
-            results = await asyncio.gather(*tasks)
-            return dict(zip([addr.get('address') for addr in addresses], results))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Обработка результатов с учетом возможных исключений
+            processed_results = {}
+            for address_data, result in zip(addresses, results):
+                address = address_data.get('address')
+                if isinstance(result, Exception):
+                    logger.error(f"Ошибка при обработке адреса {address}: {str(result)}")
+                    processed_results[address] = None
+                else:
+                    processed_results[address] = result
+            
+            return processed_results
 
     async def update_client_2gis_link(self, client_id: int, two_gis_link: str, session: AsyncSession):
         """Обновление ссылки на 2GIS для клиента"""
