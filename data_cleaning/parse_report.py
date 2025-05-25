@@ -69,6 +69,8 @@ def generate_2gis_url(address: str) -> str:
             'Connection': 'keep-alive'
         })
         
+        logger.info("status code:" + str(response.status_code))
+        
         # Проверяем статус ответа
         if response.status_code == 200:
             # Декодируем контент с правильной кодировкой
