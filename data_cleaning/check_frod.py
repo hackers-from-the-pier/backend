@@ -25,13 +25,11 @@ async def check_client_frod(client: Client, db: AsyncSession):
         client.frod_procentage = 30 if z2gis else 0
         client.frod_state = "Проверен"
         
-        await db.commit()
         logger.info(f"Клиент {client.id} проверен, результат: {client.frod_state}")
         
     except Exception as e:
         logger.error(f"Ошибка при проверке клиента {client.id}: {str(e)}", exc_info=True)
         client.frod_state = "Ошибка проверки"
-        await db.commit()
 
 async def check_pending_clients():
     """
@@ -39,7 +37,7 @@ async def check_pending_clients():
     """
     logger.info("Начало проверки клиентов")
     try:
-        async for db in get_async_session():
+        async with get_async_session() as db:
             # Получаем всех клиентов со статусом "Оценивается"
             query = select(Client).where(Client.frod_state == "Оценивается")
             result = await db.execute(query)
@@ -56,6 +54,9 @@ async def check_pending_clients():
             
             # Запускаем проверку параллельно
             await asyncio.gather(*tasks)
+            
+            # Сохраняем все изменения
+            await db.commit()
             
             logger.info("Проверка клиентов завершена")
             
