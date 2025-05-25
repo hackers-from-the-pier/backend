@@ -1,10 +1,15 @@
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
-def process_clients_data(input_file: str, output_file: str) -> None:
-    # Читаем исходные данные
-    with open(input_file, 'r', encoding='utf-8') as f:
-        clients_data = json.load(f)
+def process_clients_data(input_data: Union[str, List[Dict]], output_file: str = None) -> Union[None, List[Dict]]:
+    # Получаем данные
+    if isinstance(input_data, str):
+        # Если передан путь к файлу
+        with open(input_data, 'r', encoding='utf-8') as f:
+            clients_data = json.load(f)
+    else:
+        # Если переданы данные напрямую
+        clients_data = input_data
     
     # Обрабатываем данные
     processed_data = []
@@ -26,11 +31,21 @@ def process_clients_data(input_file: str, output_file: str) -> None:
         
         processed_data.append(processed_client)
     
-    # Сохраняем результат в JSON
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(processed_data, f, ensure_ascii=False, indent=4)
+    # Если указан файл для сохранения, сохраняем результат
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(processed_data, f, ensure_ascii=False, indent=4)
+        return None
+    
+    # Иначе возвращаем обработанные данные
+    return processed_data
 
 if __name__ == "__main__":
+    # Пример использования с файлом
     input_file = "./clients.json"
     output_file = "./processed_clients.json"
-    process_clients_data(input_file, output_file) 
+    process_clients_data(input_file, output_file)
+    
+    # Пример использования с данными напрямую
+    # clients_data = [...] # список с данными клиентов
+    # processed_data = process_clients_data(clients_data) 
