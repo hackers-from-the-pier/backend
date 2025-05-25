@@ -183,9 +183,6 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Инициализируем Faker с русской локалью
     fake = Faker('ru_RU')
     
-    logger.info(f"Проверка 2GIS для адреса: {parsed_data.get('address')}")
-    z2gis = generate_2gis_url(parsed_data.get('address'))
-    
     # Добавляем поля, которых нет во входных данных
     additional_fields = {
         'name': fake.name(),  # Генерируем ФИО
@@ -193,10 +190,10 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'phone': fake.phone_number(),  # Генерируем телефон
         'season_index': None,
         'frod_state': "Оценивается",
-        'frod_procentage': 30 if z2gis else 0,
+        'frod_procentage': 0,
         'frod_yandex': None,
         'frod_avito': None,
-        'frod_2gis': z2gis
+        'frod_2gis': None
     }
     
     parsed_data.update(additional_fields)
