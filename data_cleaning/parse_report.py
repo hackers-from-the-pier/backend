@@ -19,6 +19,9 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 import tempfile
 import os
 import uuid
+import threading
+import time
+import atexit
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +29,68 @@ logger = logging.getLogger(__name__)
 
 # Устанавливаем опцию для будущего поведения pandas
 pd.set_option('future.no_silent_downcasting', True)
+
+class SeleniumDriver:
+    _instance = None
+    _lock = threading.Lock()
+    _driver = None
+    _is_initialized = False
+    
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+    
+    def __init__(self):
+        if not self._is_initialized:
+            self._initialize_driver()
+            self._is_initialized = True
+            atexit.register(self.cleanup)
+    
+    def _initialize_driver(self):
+        """Инициализация драйвера Chrome"""
+        temp_dir = os.path.join(tempfile.gettempdir(), 'chrome_profile')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        chrome_options.add_argument(f'--user-data-dir={temp_dir}')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-software-rasterizer')
+        chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+        
+        try:
+            self._driver = webdriver.Chrome(options=chrome_options)
+            logger.info("Драйвер Chrome успешно инициализирован")
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации драйвера: {str(e)}")
+            raise
+    
+    def get_driver(self):
+        """Получение экземпляра драйвера"""
+        if self._driver is None:
+            self._initialize_driver()
+        return self._driver
+    
+    def cleanup(self):
+        """Очистка ресурсов драйвера"""
+        if self._driver:
+            try:
+                self._driver.quit()
+                logger.info("Драйвер Chrome успешно закрыт")
+            except:
+                pass
+            finally:
+                self._driver = None
+                self._is_initialized = False
 
 def is_nan_or_none(value: Any) -> bool:
     """
@@ -56,39 +121,6 @@ def convert_value(value: Any, target_type: type) -> Optional[Any]:
     except (ValueError, TypeError):
         return None
 
-def setup_selenium_driver():
-    """
-    Настраивает и возвращает драйвер Selenium
-    """
-    # Создаем уникальную временную директорию для профиля Chrome
-    temp_dir = os.path.join(tempfile.gettempdir(), f'chrome_profile_{uuid.uuid4()}')
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    chrome_options.add_argument(f'--user-data-dir={temp_dir}')
-    chrome_options.add_argument('--disable-extensions')
-    chrome_options.add_argument('--disable-software-rasterizer')
-    chrome_options.add_argument('--disable-features=VizDisplayCompositor')
-    
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-        return driver
-    except Exception as e:
-        logger.error(f"Ошибка при создании драйвера: {str(e)}")
-        # Пытаемся очистить временную директорию
-        try:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        except:
-            pass
-        raise
-
 def generate_2gis_url(address: str) -> str:
     """
     Генерирует URL для поиска адреса в 2GIS и проверяет его через Selenium
@@ -102,9 +134,11 @@ def generate_2gis_url(address: str) -> str:
     encoded_address = quote(address)
     url = f"https://2gis.ru/novorossiysk/search/{encoded_address}"
     
-    driver = None
     try:
-        driver = setup_selenium_driver()
+        # Получаем экземпляр драйвера
+        driver_manager = SeleniumDriver.get_instance()
+        driver = driver_manager.get_driver()
+        
         logger.info(f"Отправка запроса к 2GIS для адреса: {address}")
         
         try:
@@ -143,12 +177,6 @@ def generate_2gis_url(address: str) -> str:
     except Exception as e:
         logger.error(f"Ошибка при проверке адреса {address}: {str(e)}")
         return None
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except:
-                pass
 
 def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     """
