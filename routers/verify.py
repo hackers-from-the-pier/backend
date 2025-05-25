@@ -6,12 +6,18 @@ import pydantic
 from sqlalchemy import select
 from fastapi.responses import StreamingResponse
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import io
+import os
 
 router = APIRouter(tags=["Проверки"], prefix="/verify")
+
+# Регистрируем шрифт с поддержкой кириллицы
+pdfmetrics.registerFont(TTFont('Arial', 'Arial'))
 
 @router.get("/suspicious-clients-pdf")
 async def get_suspicious_clients_pdf(
@@ -34,21 +40,21 @@ async def get_suspicious_clients_pdf(
     
     # Создаем буфер для PDF
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))  # Используем альбомную ориентацию
     elements = []
     
     # Создаем стили
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name='CustomTitle',
-        fontName='Helvetica',
+        fontName='Arial',
         fontSize=16,
         alignment=1,
         spaceAfter=30
     ))
     styles.add(ParagraphStyle(
         name='CustomNormal',
-        fontName='Helvetica',
+        fontName='Arial',
         fontSize=12,
         alignment=0
     ))
@@ -73,13 +79,14 @@ async def get_suspicious_clients_pdf(
                 f"{client.frod_procentage or 0}%"
             ])
         
-        # Создаем таблицу
-        table = Table(data)
+        # Создаем таблицу с фиксированными размерами колонок
+        col_widths = [50, 150, 200, 100, 100]  # Ширина каждой колонки
+        table = Table(data, colWidths=col_widths)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
             ('FONTSIZE', (0, 0), (-1, 0), 14),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
@@ -91,10 +98,15 @@ async def get_suspicious_clients_pdf(
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('WORDWRAP', (0, 0), (-1, -1), True),  # Включаем перенос слов
         ]))
         
         elements.append(table)
         elements.append(Spacer(1, 20))
+        
+        # Добавляем разрыв страницы после каждой таблицы, кроме последней
+        if i + 6 < len(suspicious_clients):
+            elements.append(PageBreak())
     
     # Создаем PDF
     doc.build(elements)
