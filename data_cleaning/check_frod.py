@@ -23,7 +23,7 @@ async def check_client_frod(client: Client, db: AsyncSession):
         # Обновляем данные клиента
         client.frod_2gis = z2gis
         client.frod_procentage = 30 if z2gis else 0
-        client.frod_state = "Проверен"
+        client.frod_state = "Нормально" if client.frod_procentage == 0 else "Требует внимания"
         
         logger.info(f"Клиент {client.id} проверен, результат: {client.frod_state}")
         
