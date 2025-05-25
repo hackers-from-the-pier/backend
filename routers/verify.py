@@ -9,15 +9,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 import io
-import os
 
 router = APIRouter(tags=["Проверки"], prefix="/verify")
-
-# Регистрируем шрифт с поддержкой кириллицы
-pdfmetrics.registerFont(TTFont('Arial', 'Arial'))
 
 @router.get("/suspicious-clients-pdf")
 async def get_suspicious_clients_pdf(
@@ -47,14 +41,14 @@ async def get_suspicious_clients_pdf(
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name='CustomTitle',
-        fontName='Arial',
+        fontName='Times-Roman',
         fontSize=16,
         alignment=1,
         spaceAfter=30
     ))
     styles.add(ParagraphStyle(
         name='CustomNormal',
-        fontName='Arial',
+        fontName='Times-Roman',
         fontSize=12,
         alignment=0
     ))
@@ -86,7 +80,7 @@ async def get_suspicious_clients_pdf(
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Times-Roman'),
             ('FONTSIZE', (0, 0), (-1, 0), 14),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
