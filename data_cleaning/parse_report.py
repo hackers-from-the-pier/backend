@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from faker import Faker
 import pandas as pd
 import numpy as np
@@ -302,15 +302,22 @@ def get_commercial_addresses(report_id: int) -> List[str]:
         print(f"Ошибка при получении адресов из отчета {report_id}: {str(e)}")
         return []
 
-def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
+def parse_report_file(file_path_or_data: Union[str, List[Dict]]) -> List[Dict[str, Any]]:
     """
-    Парсит JSON файл отчёта и возвращает список данных клиентов
+    Парсит JSON файл отчёта или список данных и возвращает список данных клиентов
     """
-    logger.info(f"Начало парсинга файла: {file_path}")
+    logger.info(f"Начало парсинга данных")
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            report_data = json.load(f)
+        # Получаем данные
+        if isinstance(file_path_or_data, str):
+            # Если передан путь к файлу
+            with open(file_path_or_data, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
             logger.info(f"Файл успешно прочитан, размер данных: {len(str(report_data))} байт")
+        else:
+            # Если переданы данные напрямую
+            report_data = file_path_or_data
+            logger.info(f"Получены данные напрямую, размер данных: {len(str(report_data))} байт")
             
         # Предполагаем, что данные клиентов находятся в списке
         if isinstance(report_data, list):
@@ -326,7 +333,7 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
                     clients_data = [parse_client_data(client) for client in value]
                     break
         else:
-            logger.warning(f"Неизвестный формат данных в файле: {type(report_data)}")
+            logger.warning(f"Неизвестный формат данных: {type(report_data)}")
             clients_data = []
             
         # Преобразуем в DataFrame для заполнения пропусков
@@ -362,11 +369,11 @@ def parse_report_file(file_path: str) -> List[Dict[str, Any]]:
                     record[col] = value
             result.append(record)
         
-        logger.info(f"Парсинг файла завершен, обработано записей: {len(result)}")
+        logger.info(f"Парсинг данных завершен, обработано записей: {len(result)}")
         return result
         
     except Exception as e:
-        logger.error(f"Ошибка при парсинге файла {file_path}: {str(e)}", exc_info=True)
+        logger.error(f"Ошибка при парсинге данных: {str(e)}", exc_info=True)
         return []
 
 def process_report(file_path: str, report_id: int) -> List[Client]:
