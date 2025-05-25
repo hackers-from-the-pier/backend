@@ -37,7 +37,7 @@ async def check_pending_clients():
     """
     logger.info("Начало проверки клиентов")
     try:
-        async with get_async_session() as db:
+        async for db in get_async_session():
             # Получаем всех клиентов со статусом "Оценивается"
             query = select(Client).where(Client.frod_state == "Оценивается")
             result = await db.execute(query)
