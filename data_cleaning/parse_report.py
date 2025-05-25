@@ -192,8 +192,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'buildingType': 'home_type',
         'roomsCount': 'rooms_count',
         'residentsCount': 'people_count',
-        'totalArea': 'home_area',
-        'consumption': 'consumption'  # Добавляем поле consumption
+        'totalArea': 'home_area'
     }
     
     parsed_data = {}
@@ -223,13 +222,25 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             parsed_data[model_field] = value
     
-    # Расчет среднего потребления для определения is_commercial
+    # Обработка данных о потреблении
     consumption = client_data.get('consumption', {})
     if consumption:
         monthly_values = [float(v) for v in consumption.values() if v is not None]
         if monthly_values:
-            avg_consumption = sum(monthly_values) / len(monthly_values)
-            parsed_data['is_commercial'] = avg_consumption > 3000
+            # Расчет показателей потребления
+            parsed_data['summary_electricity'] = sum(monthly_values)
+            parsed_data['avg_monthly_electricity'] = sum(monthly_values) / len(monthly_values)
+            parsed_data['max_monthly_electricity'] = max(monthly_values)
+            parsed_data['min_monthly_electricity'] = min(monthly_values)
+            
+            # Расчет потребления на квадратный метр и на человека
+            if parsed_data.get('home_area'):
+                parsed_data['electricity_per_sqm'] = parsed_data['summary_electricity'] / parsed_data['home_area']
+            if parsed_data.get('people_count'):
+                parsed_data['electricity_per_person'] = parsed_data['summary_electricity'] / parsed_data['people_count']
+            
+            # Определение коммерческого статуса
+            parsed_data['is_commercial'] = parsed_data['avg_monthly_electricity'] > 3000
     
     logger.info(f"Завершение парсинга данных клиента: {client_data.get('accountId', 'Unknown')}")
     return parsed_data
