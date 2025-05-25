@@ -23,6 +23,6 @@ def process_clients_data(input_file: str, output_file: str) -> None:
         json.dump(processed_data, f, ensure_ascii=False, indent=4)
 
 if __name__ == "__main__":
-    input_file = "data/raw/clients.json"
-    output_file = "data/processed/processed_clients.json"
+    input_file = "./clients.json"
+    output_file = "./processed_clients.json"
     process_clients_data(input_file, output_file) 
