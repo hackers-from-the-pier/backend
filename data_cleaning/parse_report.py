@@ -74,6 +74,8 @@ def generate_2gis_url(address: str) -> str:
             # Декодируем контент с правильной кодировкой
             content = response.content.decode('utf-8')
             
+            logger.info(content)
+            
             # Проверяем наличие ключевых фраз
             hotel_phrases = [
                 'гостиница', 'отель', 'хостел', 'апартаменты',
