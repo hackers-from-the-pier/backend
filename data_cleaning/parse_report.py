@@ -188,7 +188,6 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Маппинг полей из входного JSON в поля модели
     field_mapping = {
         'accountId': 'id',
-        'isCommercial': 'is_commercial',
         'address': 'address',
         'buildingType': 'home_type',
         'roomsCount': 'rooms_count',
@@ -201,9 +200,7 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
     # Обрабатываем основные поля
     for json_field, model_field in field_mapping.items():
         value = client_data.get(json_field)
-        if json_field == 'isCommercial':
-            parsed_data[model_field] = bool(value) if value is not None else False
-        elif json_field in ['roomsCount', 'residentsCount']:
+        if json_field in ['roomsCount', 'residentsCount']:
             # Для целочисленных полей
             if value is not None:
                 try:
@@ -225,61 +222,13 @@ def parse_client_data(client_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             parsed_data[model_field] = value
     
-    # Расчет метрик потребления электроэнергии
+    # Расчет среднего потребления для определения is_commercial
     consumption = client_data.get('consumption', {})
     if consumption:
-        logger.info(f"Расчет метрик потребления для клиента {client_data.get('accountId', 'Unknown')}")
-        # Преобразуем значения в числа и фильтруем None
         monthly_values = [float(v) for v in consumption.values() if v is not None]
-        
         if monthly_values:
-            # Суммарное потребление за год
-            parsed_data['summary_electricity'] = round(sum(monthly_values), 2)
-            
-            # Среднее потребление в месяц
-            parsed_data['avg_monthly_electricity'] = round(sum(monthly_values) / len(monthly_values), 2)
-            
-            # Максимальное потребление за месяц
-            parsed_data['max_monthly_electricity'] = round(max(monthly_values), 2)
-            
-            # Минимальное потребление за месяц
-            parsed_data['min_monthly_electricity'] = round(min(monthly_values), 2)
-            
-            # Потребление на 1 м²
-            if parsed_data.get('home_area'):
-                parsed_data['electricity_per_sqm'] = round(parsed_data['summary_electricity'] / parsed_data['home_area'], 2)
-            
-            # Потребление на 1 человека
-            if parsed_data.get('people_count'):
-                parsed_data['electricity_per_person'] = round(parsed_data['summary_electricity'] / parsed_data['people_count'], 2)
-    
-    # Инициализируем Faker с русской локалью
-    fake = Faker('ru_RU')
-    
-    # Добавляем поля, которых нет во входных данных
-    additional_fields = {
-        'name': fake.name(),  # Генерируем ФИО
-        'email': fake.email(),  # Генерируем email
-        'phone': fake.phone_number(),  # Генерируем телефон
-        'season_index': None,
-        'frod_state': "Оценивается",
-        'frod_procentage': 0,
-        'frod_yandex': None,
-        'frod_avito': None,
-        'frod_2gis': None
-    }
-    
-    parsed_data.update(additional_fields)
-    
-    # Проверяем, является ли клиент коммерческим
-    is_commercial = client_data.get('isCommercial', False)
-    if is_commercial:
-        logger.info(f"Клиент {client_data.get('accountId', 'Unknown')} определен как коммерческий")
-        # Для коммерческих клиентов устанавливаем frod_procentage = 0
-        # и пропускаем дальнейшую обработку
-        parsed_data['is_commercial'] = True
-        parsed_data['frod_procentage'] = 0.0
-        parsed_data['frod_state'] = "Нормальный"
+            avg_consumption = sum(monthly_values) / len(monthly_values)
+            parsed_data['is_commercial'] = avg_consumption > 3000
     
     logger.info(f"Завершение парсинга данных клиента: {client_data.get('accountId', 'Unknown')}")
     return parsed_data
@@ -340,13 +289,13 @@ def parse_report_file(file_path_or_data: Union[str, List[Dict]]) -> List[Dict[st
         logger.info("Преобразование данных в DataFrame")
         df = pd.DataFrame(clients_data)
         
-        # Извлекаем регион из адреса
-        logger.info("Извлечение регионов из адресов")
+        # Извлекаем регион из адреса для группировки
+        logger.info("Извлечение регионов из адресов для группировки")
         df['region'] = df['address'].apply(lambda x: x.split(',')[0].strip() if pd.notna(x) and ',' in x else 'Unknown')
         
         # Заполняем пропуски медианными значениями для числовых полей
         logger.info("Заполнение пропущенных значений")
-        numeric_columns = ['home_area', 'season_index', 'people_count', 'rooms_count', 'frod_procentage']
+        numeric_columns = ['home_area', 'season_index', 'people_count', 'rooms_count']
         for col in numeric_columns:
             if col in df.columns:
                 logger.info(f"Заполнение пропусков для колонки: {col}")
@@ -358,12 +307,14 @@ def parse_report_file(file_path_or_data: Union[str, List[Dict]]) -> List[Dict[st
         for _, row in df.iterrows():
             record = {}
             for col in df.columns:
+                if col == 'region':  # Пропускаем поле region
+                    continue
                 value = row[col]
                 if pd.isna(value):
                     record[col] = None
                 elif col in ['people_count', 'rooms_count']:
                     record[col] = int(value) if value is not None else None
-                elif col in ['home_area', 'season_index', 'frod_procentage']:
+                elif col in ['home_area', 'season_index']:
                     record[col] = float(value) if value is not None else None
                 else:
                     record[col] = value
