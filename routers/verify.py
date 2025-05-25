@@ -14,14 +14,13 @@ import io
 router = APIRouter(tags=["Проверки"], prefix="/verify")
 
 @router.get("/suspicious-clients-pdf")
-async def get_suspicious_clients_pdf():
+async def get_suspicious_clients_pdf(
+    db: AsyncSession = Depends(get_async_session)
+):
     """
     Генерирует PDF файл с информацией о подозрительных клиентах.
     На каждой странице размещается информация о 6 клиентах.
     """
-    # Получаем сессию базы данных
-    async_session = await get_async_session()
-    
     # Формируем запрос для получения подозрительных клиентов
     query = select(User).where(
         User.summary_electricity > 3000,
@@ -30,9 +29,8 @@ async def get_suspicious_clients_pdf():
     )
     
     # Выполняем запрос
-    async with async_session() as session:
-        result = await session.execute(query)
-        suspicious_clients = result.scalars().all()
+    result = await db.execute(query)
+    suspicious_clients = result.scalars().all()
     
     # Создаем буфер для PDF
     buffer = io.BytesIO()
