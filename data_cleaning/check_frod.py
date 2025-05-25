@@ -1,7 +1,5 @@
 import asyncio
 import logging
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.database import get_async_session
@@ -64,22 +62,10 @@ async def check_pending_clients():
     except Exception as e:
         logger.error(f"Ошибка при проверке клиентов: {str(e)}", exc_info=True)
 
-def start_frod_checker():
+async def start_frod_checker():
     """
-    Запускает планировщик для периодической проверки клиентов
+    Запускает бесконечный цикл проверки клиентов
     """
-    scheduler = AsyncIOScheduler()
-    
-    # Добавляем задачу, которая будет выполняться каждую минуту
-    scheduler.add_job(
-        check_pending_clients,
-        trigger=IntervalTrigger(minutes=1),
-        id='check_frod',
-        replace_existing=True
-    )
-    
-    # Запускаем планировщик
-    scheduler.start()
-    logger.info("Планировщик проверки фрода запущен")
-    
-    return scheduler 
+    while True:
+        await check_pending_clients()
+        await asyncio.sleep(60)  # Ждем 1 минуту перед следующей проверкой 
