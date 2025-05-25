@@ -24,3 +24,4 @@ seleniumbase
 openpyxl
 paramiko==3.4.0
 faker
+reportlab==4.1.0
