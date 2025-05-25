@@ -87,6 +87,8 @@ def generate_2gis_url(address: str) -> str:
         )
         html_content = response.text.lower()
         
+        logger.info(html_content)
+        
         # Список ключевых фраз для проверки
         hotel_phrases = [
             'гостиница', 'отель', 'хостел', 'апартаменты',
