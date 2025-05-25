@@ -224,7 +224,7 @@ async def start_check(
                             # Запускаем process_report в отдельном потоке
                             loop = asyncio.get_event_loop()
                             logger.info(f"Запуск process_report для файла: {file_path}")
-                            clients = await loop.run_in_executor(None, process_report, file_path, report_id)
+                            clients = process_report(file_path, report_id) #await loop.run_in_executor(None, process_report, file_path, report_id)
                             logger.info(f"Файл обработан, получено клиентов: {len(clients)}")
                             
                             # Обновляем статистику
